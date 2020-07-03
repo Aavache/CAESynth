@@ -1,2 +1,2 @@
-# timbre_pitch_disentanglement
-This repository holds the implementation for achieving timbre and pitch disentanglement for musical data.
+# Timbre & Pitch Disentanglement
+In this repository, we research the timbre and pitch disentanglement for musical data.
