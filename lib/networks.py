@@ -34,7 +34,6 @@ class SkipGanSynthAE(nn.Module):
         self.dec_6 = nn.Sequential(*net_utils.create_gansynth_block(64*dec_ch_scale, 32, 'dec'))
         self.dec_7 = nn.Sequential(*net_utils.create_gansynth_block(32*dec_ch_scale, 32, 'dec'))
         self.dec_8 = nn.Conv2d(32*dec_ch_scale, in_channels, kernel_size=(1,1), stride=1)
-        self.act = nn.Tanh()
     
     def encode(self, input):
         he_1 = self.enc_1(input)
@@ -55,8 +54,50 @@ class SkipGanSynthAE(nn.Module):
         hd_5 = self.dec_5(net_utils.skip_connection(hd_4, skip[3], self.skip_op))
         hd_6 = self.dec_6(net_utils.skip_connection(hd_5, skip[2], self.skip_op))
         hd_7 = self.dec_7(net_utils.skip_connection(hd_6, skip[1], self.skip_op))
-        hd_8 = self.dec_8(net_utils.skip_connection(hd_7, skip[0], self.skip_op))
-        out = self.act(hd_8)
+        out = self.dec_8(net_utils.skip_connection(hd_7, skip[0], self.skip_op))
+
+        return out
+
+    def forward(self, input, cond=None):
+        latent, skip = self.encode(input)
+        out = self.decode(latent, skip)
+
+        return out, latent
+
+class SkipShallowGanSynthAE(nn.Module):
+    ''' 
+    '''
+    def __init__(self, latent_size, in_channels = 2, feat_width = 128, skip_op = 'add'):
+        super(SkipShallowGanSynthAE, self).__init__()
+        kw = feat_width//8
+        self.skip_op = skip_op     
+        dec_ch_scale = 2 if self.skip_op == 'concat' else 1
+        self.enc_1 = nn.Conv2d(in_channels, 32, (1,1), 1)
+        self.enc_2 = nn.Sequential(*net_utils.create_gansynth_block(32, 64, 'enc'))
+        self.enc_3 = nn.Sequential(*net_utils.create_gansynth_block(64, 128, 'enc'))
+        self.enc_4 = nn.Sequential(*net_utils.create_gansynth_block(128, 256, 'enc'))
+        self.enc_5 = nn.Conv2d(256, latent_size, (128,kw), 1)
+
+        self.dec_1 = nn.Conv2d(latent_size, 256, kernel_size=(128,kw), stride=1, padding=(127,(kw//2)), bias=False)
+        self.dec_2 = nn.Sequential(*net_utils.create_gansynth_block(256*dec_ch_scale, 128, 'dec'))
+        self.dec_3 = nn.Sequential(*net_utils.create_gansynth_block(128*dec_ch_scale, 64, 'dec'))
+        self.dec_4 = nn.Sequential(*net_utils.create_gansynth_block(64*dec_ch_scale, 32, 'dec'))
+        self.dec_5 = nn.Conv2d(32*dec_ch_scale, in_channels, kernel_size=(1,1), stride=1)
+    
+    def encode(self, input):
+        he_1 = self.enc_1(input)
+        he_2 = self.enc_2(he_1)
+        he_3 = self.enc_3(he_2)
+        he_4 = self.enc_4(he_3)
+        latent = self.enc_5(he_4)
+        return latent, [he_1,he_2,he_3,he_4]
+
+    def decode(self, latent, skip, cond=None):
+        hd_1 = self.dec_1(latent)
+        hd_2 = self.dec_2(net_utils.skip_connection(hd_1, skip[3], self.skip_op))
+        hd_3 = self.dec_3(net_utils.skip_connection(hd_2, skip[2], self.skip_op))
+        hd_4 = self.dec_4(net_utils.skip_connection(hd_3, skip[1], self.skip_op))
+        out = self.dec_5(net_utils.skip_connection(hd_4, skip[0], self.skip_op))
 
         return out
 
@@ -92,7 +133,6 @@ class GanSynthAE(nn.Module):
         dec_layers += net_utils.create_gansynth_block(64, 32, 'dec')
         dec_layers += net_utils.create_gansynth_block(32, 32, 'dec')
         dec_layers += [nn.Conv2d(32, in_channels, kernel_size=(1,1), stride=1)]
-        dec_layers += [nn.Tanh()]
         self.dec_net = nn.Sequential(*dec_layers)
     
     def encoder(self, input):
@@ -236,7 +276,16 @@ def instantiate_autoencoder(opt):
         return SkipGanSynthAE(opt['model']['timbre_latent_size'],
                         opt['model']['in_ch'],
                         feat_width= feat_width)
+    if opt['model']['ae'] == 'skipcatgansynth':
+        return SkipGanSynthAE(opt['model']['timbre_latent_size'],
+                        opt['model']['in_ch'],
+                        feat_width= feat_width,
+                        skip_op='concat')
     elif opt['model']['ae'] == 'gansynth':
+        return GanSynthAE(opt['model']['timbre_latent_size'],
+                        opt['model']['in_ch'],
+                        feat_width= feat_width)
+    elif opt['model']['ae'] == 'shallowgansynth':
         return GanSynthAE(opt['model']['timbre_latent_size'],
                         opt['model']['in_ch'],
                         feat_width= feat_width)
