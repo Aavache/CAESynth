@@ -4,9 +4,8 @@ import numpy as np
 import torch 
 
 class DataNormalizer(object):
-    def __init__(self, dataloader, DEVICE):
+    def __init__(self, dataloader):
         self.dataloader = dataloader
-        self.DEVICE = DEVICE
         print('WARNING. Normalization parameters are hardcoded!')
         if self.dataloader.include_phase:
             #self._range_normalizer_with_IF(magnitude_margin=0.8, IF_margin=1.0)
@@ -30,9 +29,8 @@ class DataNormalizer(object):
             spec = data['src_data'][0,:,:]
             if spec.min() < min_spec: min_spec=spec.min()
             if spec.max() > max_spec: max_spec=spec.max()
-            if batch_idx > 100:
-                break
-
+            #if batch_idx > 100:
+            #    break
         self.s_a = magnitude_margin * (2.0 / (max_spec - min_spec))
         self.s_b = magnitude_margin * (-2.0 * min_spec / (max_spec - min_spec) - 1.0)
 
@@ -51,9 +49,14 @@ class DataNormalizer(object):
 
             if IF.min() < min_IF: min_IF=IF.min()
             if IF.max() > max_IF: max_IF=IF.max()
-            if batch_idx > 100:
-                break
-
+            if batch_idx % 1000 == 0:
+                print(batch_idx)
+            #if batch_idx > 100:
+            #    break
+        print(min_spec)
+        print(max_spec)
+        print(min_IF)
+        print(max_IF)
         self.s_a = magnitude_margin * (2.0 / (max_spec - min_spec))
         self.s_b = magnitude_margin * (-2.0 * min_spec / (max_spec - min_spec) - 1.0)
         
@@ -62,13 +65,13 @@ class DataNormalizer(object):
 
     def normalize(self, feature_map):
         if self.dataloader.include_phase:
-            a = np.asarray([self.s_a, self.p_a])[None, :, None, None]
-            b = np.asarray([self.s_b, self.p_b])[None, :, None, None]
+            a = np.asarray([self.s_a, self.p_a])[:, None, None]#[None, :, None, None]
+            b = np.asarray([self.s_b, self.p_b])[:, None, None]#[None, :, None, None]
         else:
-            a = np.asarray([self.s_a])[None, :, None, None]
-            b = np.asarray([self.s_b])[None, :, None, None]            
-        a = torch.FloatTensor(a).to(self.DEVICE)
-        b = torch.FloatTensor(b).to(self.DEVICE)
+            a = np.asarray([self.s_a])[:, None, None]#[None, :, None, None]
+            b = np.asarray([self.s_b])[:, None, None]#[None, :, None, None]            
+        a = torch.FloatTensor(a)#.to(self.device)
+        b = torch.FloatTensor(b)#.to(self.device)
         feature_map = feature_map *a + b
 
         return feature_map
@@ -78,5 +81,5 @@ class DataNormalizer(object):
         return spec
 
     def denormalize_IF(self, IF, p_a, p_b):
-        IF = (IF-p_b) / p_a
+        IF = (IF - p_b) / p_a
         return IF

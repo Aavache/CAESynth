@@ -32,13 +32,12 @@ def main():
     train_opt = opt['train']
     
     gpu_ids = opt['train']['devices']
-    device = 'cuda:{}'.format(gpu_ids[0])
+    #device = 'cuda:{}'.format(gpu_ids[0])
     # Set cuda if available
     if len(gpu_ids) > 0:
         torch.cuda.set_device(gpu_ids[0])
     
     dataset = NSynth(opt)  # create a dataset according to the options file
-    data_norm = DataNormalizer(dataset, device)
     dataloader = torch.utils.data.DataLoader(
                                     dataset,
                                     batch_size=opt['train']['batch_size'],
@@ -65,17 +64,10 @@ def main():
 
             if total_iters % train_opt['print_freq'] == 0:
                 t_data = iter_start_time - iter_data_time
-                
-            data['src_data'] = data['src_data'].to(device)
-            data['trg_data'] = data['trg_data'].to(device)
-            data['src_pitch'] = data['src_pitch'].to(device)
-            data['trg_pitch'] = data['trg_pitch'].to(device)
             total_iters += train_opt['batch_size']
             epoch_iter += train_opt['batch_size']
             
-            data['src_data'] = data_norm.normalize(data['src_data'])
-            data['trg_data'] = data_norm.normalize(data['trg_data'])
-            model.set_input(data)         # unpack data from dataset and apply preprocessing
+            model.set_input(data)         # unpack data from dataset
             model.optimize_parameters()   # calculate loss functions, get gradients, update network weights
 
             losses = model.get_current_losses()

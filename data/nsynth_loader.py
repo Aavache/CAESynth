@@ -15,6 +15,7 @@ import math
 
 # Internal Libraries
 import lib.signal_utils as sign_op
+from lib.normalizer import DataNormalizer
 
 def expand(mat):
     while not math.log(mat.shape[1], 2).is_integer():
@@ -66,6 +67,9 @@ class NSynth(data.Dataset):
 
         # filter pitch < 84 and pitch  > 24 
         self.df = self.df[(self.df['pitch'] < 84) & ( self.df['pitch'] > 24)]
+
+        # Initializing Data Normalizer
+        self.data_norm = DataNormalizer(self)
       
     def __len__(self):
         return len(self.df)
@@ -94,8 +98,10 @@ class NSynth(data.Dataset):
             logmel = torch.from_numpy(logmel).float()
             data = logmel.unsqueeze(0)
 
-        pitch = to_one_hot(128, int(pitch))
+        # Normalize features
+        data = self.data_norm.normalize(data)#.to(self.device))
 
+        pitch = to_one_hot(128, int(pitch))#.to(self.device)
         return data, pitch
 
     def compute_features(self, sample):
@@ -128,7 +134,6 @@ class NSynth(data.Dataset):
 
         src_name =  os.path.join(self.root, 'audio/', src_row['file'] + '.wav')
         trg_name =  os.path.join(self.root, 'audio/', trg_row.iloc[0]['file'] + '.wav')
-        #name = self.filenames[index]
 
         src_data, src_pitch = self.arrange_feature(src_name, src_row['pitch'])
         trg_data, trg_pitch = self.arrange_feature(trg_name, trg_row['pitch'])
