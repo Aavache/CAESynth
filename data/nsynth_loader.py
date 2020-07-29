@@ -51,6 +51,7 @@ class NSynth(data.Dataset):
         self.root = opt['data']['data_path']
         self.include_phase = True if opt['model']['in_ch'] == 2 else False 
         self.segment_size = opt['data']['segment_size']
+        self.sample_size = opt['data'].get('sample_size', 2)
         #self.filenames = glob.glob(os.path.join(self.root, "audio/*.wav"))
 
         self.df = pd.read_json(os.path.join(os.path.join(self.root, opt['data']['meta_file'])), orient='index')
@@ -117,8 +118,8 @@ class NSynth(data.Dataset):
             return logmel, mel_p
         else:
             logmel = sign_op.specgrams_to_melspecgrams(magnitude)
-            return logmel 
-
+            return logmel
+    
     def __getitem__(self, index):
         """
         Args:
@@ -126,8 +127,55 @@ class NSynth(data.Dataset):
         Returns:
             dictionary
         """
-        if self.shuffle and index == 0:
+        if self.shuffle and index == 0: # We shuffle the dataset metadata at the first iteration of every epoch
             self.df = self.df.sample(frac=1).reset_index(drop=True)
+
+        if self.sample_size == 3:
+            return self.get_triplet_item(index)
+        elif self.sample_size == 2:
+            return self.get_doublet_item(index)
+        else:
+            return self.get_single_item(index)
+
+    def get_triplet_item(self, index):
+        """
+        Args:
+            index (int): Index
+        Returns:
+            dictionary
+        """
+        anc_row = self.df.iloc[index]
+        # Sampling first, dipole, positive in pitch and negative in timber
+        dip1_row = self.df[(self.df['instrument'] != anc_row['instrument']) & 
+                        (self.df['pitch'] == anc_row['pitch'])].sample(n=1)
+
+        # Sampling second, dipole, positive in timbre and negative in pitch
+        dip2_row = self.df[(self.df['instrument'] == anc_row['instrument']) & 
+                        (self.df['pitch'] != anc_row['pitch'])].sample(n=1)
+
+        anc_name =  os.path.join(self.root, 'audio/', anc_row['file'] + '.wav')
+        dip1_name =  os.path.join(self.root, 'audio/', dip1_row.iloc[0]['file'] + '.wav')
+        dip2_name =  os.path.join(self.root, 'audio/', dip2_row.iloc[0]['file'] + '.wav')
+
+        anc_data, anc_pitch = self.arrange_feature(anc_name, anc_row['pitch'])
+        dip1_data, dip1_pitch = self.arrange_feature(dip1_name, dip1_row['pitch'])
+        dip2_data, dip2_pitch = self.arrange_feature(dip2_name, dip2_row['pitch'])
+
+        anc_instr = torch.tensor(int(anc_row['instrument_family']))
+        dip1_instr = torch.tensor(int(dip1_row['instrument_family']))
+        dip2_instr = torch.tensor(int(dip2_row['instrument_family']))
+
+        return {'anc_data': anc_data, 'anc_pitch': anc_pitch, 'anc_instr': anc_instr,
+                'dip1_data': dip1_data, 'dip1_pitch': dip1_pitch, 'dip1_instr': dip1_instr,
+                'dip2_data': dip2_data, 'dip2_pitch': dip2_pitch, 'dip2_instr': dip2_instr}
+
+    def get_doublet_item(self, index):
+        """
+        Args:
+            index (int): Index
+        Returns:
+            dictionary
+        """
         src_row = self.df.iloc[index]
         trg_row = self.df[(self.df['instrument'] == src_row['instrument']) & 
                         (self.df['velocity'] == src_row['velocity'])].sample(n=1)
@@ -144,3 +192,17 @@ class NSynth(data.Dataset):
         # return {'data': data, 'pitch': pitch}
         return {'src_data': src_data, 'src_pitch': src_pitch, 'src_instr': src_instr,
                 'trg_data': trg_data, 'trg_pitch': trg_pitch, 'trg_instr': trg_instr}
+
+    def get_single_item(self, index):
+        """
+        Args:
+            index (int): Index
+        Returns:
+            dictionary
+        """
+        row = self.df.iloc[index]
+        name =  os.path.join(self.root, 'audio/', row['file'] + '.wav')
+        data, pitch = self.arrange_feature(name, row['pitch'])
+        instr = torch.tensor(int(row['instrument_family']))
+
+        return {'data': data, 'pitch': pitch, 'instr': instr}

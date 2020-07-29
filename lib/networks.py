@@ -25,6 +25,10 @@ class SkipGanSynthAE(nn.Module):
         self.enc_6 = nn.Sequential(*net_utils.create_gansynth_block(256, 256, 'enc'))
         self.enc_7 = nn.Sequential(*net_utils.create_gansynth_block(256, 256, 'enc'))
         self.enc_8 = nn.Conv2d(256, latent_size, (16,kw), 1)
+        self.enc_net_params = list(self.enc_1.parameters()) + list(self.enc_2.parameters()) + \
+                         list(self.enc_3.parameters()) + list(self.enc_4.parameters()) + \
+                         list(self.enc_5.parameters()) + list(self.enc_6.parameters()) + \
+                         list(self.enc_7.parameters()) + list(self.enc_8.parameters())
 
         self.dec_1 = nn.Conv2d(latent_size, 256, kernel_size=(16,kw), stride=1, padding=(15,(kw//2)), bias=False)
         self.dec_2 = nn.Sequential(*net_utils.create_gansynth_block(256*dec_ch_scale, 256, 'dec'))
@@ -77,6 +81,9 @@ class SkipShallowGanSynthAE(nn.Module):
         self.enc_3 = nn.Sequential(*net_utils.create_gansynth_block(64, 128, 'enc'))
         self.enc_4 = nn.Sequential(*net_utils.create_gansynth_block(128, 256, 'enc'))
         self.enc_5 = nn.Conv2d(256, latent_size, (128,kw), 1)
+        self.enc_net_params = list(self.enc_1.parameters()) + list(self.enc_2.parameters()) + \
+                         list(self.enc_3.parameters()) + list(self.enc_4.parameters()) + \
+                         list(self.enc_5.parameters())
 
         self.dec_1 = nn.Conv2d(latent_size, 256, kernel_size=(128,kw), stride=1, padding=(127,(kw//2)), bias=False)
         self.dec_2 = nn.Sequential(*net_utils.create_gansynth_block(256*dec_ch_scale, 128, 'dec'))
@@ -123,6 +130,7 @@ class GanSynthAE(nn.Module):
         enc_layers += net_utils.create_gansynth_block(256, 256, 'enc')
         enc_layers += [nn.Conv2d(256, latent_size, (16,kw), 1)]
         self.enc_net = nn.Sequential(*enc_layers)
+        self.enc_net_params = self.enc_net.parameters
 
         dec_layers = []
         dec_layers += [nn.Conv2d(latent_size, 256, kernel_size=(16,kw), stride=1, padding=(15,(kw//2)), bias=False)]
@@ -135,7 +143,7 @@ class GanSynthAE(nn.Module):
         dec_layers += [nn.Conv2d(32, in_channels, kernel_size=(1,1), stride=1)]
         self.dec_net = nn.Sequential(*dec_layers)
     
-    def encoder(self, input):
+    def encode(self, input):
         return self.enc_net(input)
 
     def decode(self, latent, cond=None):
