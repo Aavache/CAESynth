@@ -48,9 +48,7 @@ class AEModel(BaseModel):
     
     def set_input(self, data):
         self.x = data['src_data'].to(self.device)
-        self.x_pitch = data['src_pitch'].to(self.device)
         self.y = data['trg_data'].to(self.device)
-        self.y_pitch = data['trg_pitch'].to(self.device)
 
     def forward(self):
         """Run forward pass"""
