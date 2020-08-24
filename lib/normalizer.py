@@ -7,16 +7,16 @@ class DataNormalizer(object):
     def __init__(self, dataloader):
         self.dataloader = dataloader
         print('WARNING. Normalization parameters are hardcoded!')
+        self.p_a = 0.0034997
+        self.p_b = -0.010897
+        self.s_a = 0.060437
+        self.s_b = 0.034964
         if self.dataloader.include_phase:
             #self._range_normalizer_with_IF(magnitude_margin=0.8, IF_margin=1.0)
-            self.p_a = 0.0034997
-            self.p_b = -0.010897
             print("p_a:", self.p_a)
             print("p_b:", self.p_b)
         #else:
            #self._range_normalizer(magnitude_margin=0.8) 
-        self.s_a = 0.060437
-        self.s_b = 0.034964
         print("s_a:", self.s_a)
         print("s_b:", self.s_b)
 

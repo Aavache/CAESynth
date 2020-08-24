@@ -189,7 +189,6 @@ class NSynth(data.Dataset):
         src_instr = torch.tensor(int(src_row['instrument_family']))
         trg_instr = torch.tensor(int(trg_row['instrument_family']))
 
-        # return {'data': data, 'pitch': pitch}
         return {'src_data': src_data, 'src_pitch': src_pitch, 'src_instr': src_instr,
                 'trg_data': trg_data, 'trg_pitch': trg_pitch, 'trg_instr': trg_instr}
 

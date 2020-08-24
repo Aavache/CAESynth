@@ -135,7 +135,7 @@ def _mel_to_linear_matrix():
     return np.matmul(m_t, np.diag(d))
 
 
-def melspecgrams_to_specgrams(logmelmag2, mel_p):
+def melspecgrams_to_specgrams(logmelmag2 = None, mel_p = None):
     """Converts melspecgrams to specgrams.
     Args:
       melspecgrams: Tensor of log magnitudes and instantaneous frequencies,
@@ -144,19 +144,23 @@ def melspecgrams_to_specgrams(logmelmag2, mel_p):
       specgrams: Tensor of log magnitudes and instantaneous frequencies,
         shape [freq, time].
     """
-    logmelmag2 = logmelmag2.T
-    mel_p = mel_p.T
-    logmelmag2 = np.array([logmelmag2])
-    mel_p = np.array([mel_p])
-  
-    
-    mel2l = _mel_to_linear_matrix()  
-    mag2 = np.tensordot(np.exp(logmelmag2), mel2l, 1)
-    logmag = 0.5 * np.log(mag2+1e-6)
-    mel_phase_angle = np.cumsum(mel_p * np.pi, axis=1)
-    phase_angle = np.tensordot(mel_phase_angle, mel2l, 1)
-    p = instantaneous_frequency(phase_angle,time_axis=1)
-    return logmag[0].T, p[0].T
+    mel2l = _mel_to_linear_matrix()
+    logmag = None
+    p = None
+    if logmelmag2 is not None:
+        logmelmag2 = logmelmag2.T
+        logmelmag2 = np.array([logmelmag2])
+        mag2 = np.tensordot(np.exp(logmelmag2), mel2l, 1)
+        logmag = 0.5 * np.log(mag2+1e-6)
+        logmag = logmag[0].T
+    if mel_p is not None:
+        mel_p = mel_p.T
+        mel_p = np.array([mel_p])
+        mel_phase_angle = np.cumsum(mel_p * np.pi, axis=1)
+        phase_angle = np.tensordot(mel_phase_angle, mel2l, 1)
+        p = instantaneous_frequency(phase_angle,time_axis=1)
+        p = p[0].T
+    return logmag, p
 
 
 def specgrams_to_melspecgrams(magnitude, IF=None):

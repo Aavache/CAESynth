@@ -65,7 +65,7 @@ class AEModel(BaseModel):
         self.loss_recon = self.criterion_recon(self.recon_src, self.x)* self.lambda_recon
         self.loss_recon += self.criterion_recon(self.recon_trg, self.y)* self.lambda_recon
 
-        self.loss_recon.backward(retain_graph=True)
+        self.loss_recon.backward()
 
     def optimize_parameters(self):
         """Calculate losses, gradients, and update network weights; called in every training iteration"""
