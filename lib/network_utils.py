@@ -3,6 +3,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+# Internal Libs
+from . import spectral_norm as sn
 
 class PixelWiseNormLayer(nn.Module):
     """
@@ -15,6 +17,25 @@ class PixelWiseNormLayer(nn.Module):
 
     def forward(self, x):
         return x / torch.sqrt(torch.mean(x ** 2, dim=1, keepdim=True) + 1e-8)
+
+class ConvSN2D(nn.Module):
+    """ Spetrally Normalized 2D Convolutional Neural Layer
+
+    Parameters:
+        input_ch (int): Number of input channels.
+        output_ch (int): Number of output channels.
+        ks (tuple, int): Kernel size of height, width, if integer, height and width will have same size.
+        std (tuple, int): Stride size of height, width, if integer, height and width will have same size.
+        pad (tuple, int): Padding size of height, width, if integer, height and width will have same size.
+        use_bias (bool): Flag Using bias on the layer.
+    """
+
+    def __init__(self, input_ch, output_ch, ks, std, pad=0, use_bias= False):
+        super(ConvSN2D, self).__init__()
+        self.conv2d = sn.spectral_norm(nn.Conv2d(input_ch, output_ch, ks, std, pad, bias=use_bias))
+
+    def forward(self, input):
+        return self.conv2d(input)
     
 class GANSynthBlock(nn.Module):
 
@@ -28,6 +49,29 @@ class GANSynthBlock(nn.Module):
                     PixelWiseNormLayer(),
                     nn.AvgPool2d(kernel_size=2, stride=2, ceil_mode=False, count_include_pad=False))
         else:
+            self.conv = nn.Sequential(
+                    nn.Conv2d(in_channel, out_channel, (3,3), 1, padding=((3-1)//2,(3-1)//2)),
+                    nn.Conv2d(out_channel, out_channel, (3,3), 1, padding=((3-1)//2,(3-1)//2)),
+                    nn.LeakyReLU(0.2),
+                    PixelWiseNormLayer(),
+                    nn.Upsample(scale_factor=2, mode='nearest'))
+
+    def forward(self, input):
+        return self.conv(input)
+
+class GANSynthBlock_2(nn.Module):
+
+    def __init__(self, in_channel, out_channel, mode='enc'):
+        super(GANSynthBlock_2, self).__init__()
+        if mode == 'enc':
+            # Spectrally Normalized Convolutional Layers
+            self.conv = nn.Sequential(
+                    ConvSN2D(in_channel, out_channel, (3,3), 1, pad=((3-1)//2,(3-1)//2)),
+                    ConvSN2D(out_channel, out_channel, (3,3), 1, pad=((3-1)//2,(3-1)//2)),
+                    nn.LeakyReLU(0.2),
+                    nn.AvgPool2d(kernel_size=2, stride=2, ceil_mode=False, count_include_pad=False))
+        else: # de
+            # Standard Convolutional Layers with Pixel Normalization
             self.conv = nn.Sequential(
                     nn.Conv2d(in_channel, out_channel, (3,3), 1, padding=((3-1)//2,(3-1)//2)),
                     nn.Conv2d(out_channel, out_channel, (3,3), 1, padding=((3-1)//2,(3-1)//2)),

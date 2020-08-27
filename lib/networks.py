@@ -314,6 +314,53 @@ class GrowingGanSynthEnc(nn.Module):
             elif i > phase_idx:
                 out = conv(out)
         return out
+
+class GrowingGanSynthEnc_2(nn.Module):
+    ''' 
+    '''
+    def __init__(self, latent_size, in_channels = 2, feat_width = 128, config = None):
+        super(GrowingGanSynthEnc_2, self).__init__()
+        kw = feat_width//64
+        self.config = config # Updated overtime
+        self.enc_net = nn.ModuleList([net_utils.ConvSN2D(in_channels, 32, (1,1), 1),
+                                    net_utils.GANSynthBlock_2(32, 32, 'enc'),
+                                    net_utils.GANSynthBlock_2(32, 64, 'enc'),
+                                    net_utils.GANSynthBlock_2(64, 128, 'enc'),
+                                    net_utils.GANSynthBlock_2(128, 256, 'enc'),
+                                    net_utils.GANSynthBlock_2(256, 256, 'enc'),
+                                    net_utils.GANSynthBlock_2(256, 256, 'enc'),
+                                    net_utils.ConvSN2D(256, latent_size, (16,kw), 1)])
+        self.enc_net_params = self.enc_net.parameters()
+
+        self.from_rgb = nn.ModuleList([nn.Conv2d(in_channels, in_channels, 1),
+                                       nn.Conv2d(in_channels, 32, 1),
+                                       nn.Conv2d(in_channels, 32, 1),
+                                       nn.Conv2d(in_channels, 64, 1),
+                                       nn.Conv2d(in_channels, 128, 1),
+                                       nn.Conv2d(in_channels, 256, 1),
+                                       nn.Conv2d(in_channels, 256, 1),
+                                       nn.Conv2d(in_channels, 256, 1)])
+
+    def forward(self, input):
+        for i, (conv, from_rgb) in enumerate(zip(self.enc_net, self.from_rgb)):
+            phase_idx = len(self.enc_net) - self.config['phase'] - 1
+            if i == phase_idx:
+                if i !=  len(self.enc_net)- 1 and self.config['status'] == 'fadein':
+                    out = from_rgb(input)
+                    out = conv(out)
+                    # The first layer has no upsampling, therefore we do not need to upsample the skip connection
+                    input_down = net_utils.down_sample2x2(input) if i != 0 else input
+                    skip_rgb = self.from_rgb[i + 1](input_down)
+                    out = self.config['alpha'] * skip_rgb + (1 - self.config['alpha']) * out # alpha descreses from 0 to 1
+                else: # Stable
+                    if phase_idx == 0:
+                        out = conv(input)
+                    else:
+                        out = from_rgb(input)
+                        out = conv(out)
+            elif i > phase_idx:
+                out = conv(out)
+        return out
     
 class GrowingGanSynthDec(nn.Module):
     ''' 
@@ -350,11 +397,52 @@ class GrowingGanSynthDec(nn.Module):
                 if i > 0 and self.config['status'] == 'fadein':
                     skip_rgb = to_rgb(out)
                     out = to_rgb(out)
-                    out = self.config['alpha'] * skip_rgb + (1 - self.config['alpha']) * out # alpha descreses from 0 to 1
+                    out = self.config['alpha'] * skip_rgb + (1 - self.config['alpha']) * out # alpha descreses from 1 to 0 
                 elif i != len(self.dec_net)-1: # Stable and not the last layer.
                     out = to_rgb(out)
                 break
         return out
+
+class GrowingGanSynthDec_2(nn.Module):
+    ''' 
+    '''
+    def __init__(self, latent_size, in_channels = 2, feat_width = 128, config = None):
+        super(GrowingGanSynthDec_2, self).__init__()
+        kw = feat_width//64
+        self.config = config
+        self.dec_net = nn.ModuleList([nn.Conv2d(latent_size, 256, kernel_size=(16,kw), stride=1, padding=(15,(kw//2)), bias=False),
+                                    net_utils.GANSynthBlock_2(256, 256, 'dec'),
+                                    net_utils.GANSynthBlock_2(256, 256, 'dec'),
+                                    net_utils.GANSynthBlock_2(256, 128, 'dec'),
+                                    net_utils.GANSynthBlock_2(128, 64, 'dec'),
+                                    net_utils.GANSynthBlock_2(64, 32, 'dec'),
+                                    net_utils.GANSynthBlock_2(32, 32, 'dec'),
+                                    nn.Conv2d(32, in_channels, kernel_size=(1,1), stride=1)])
+
+        self.to_rgb = nn.ModuleList([nn.Conv2d(256, in_channels, 1), #Each has 3 out channels and kernel size 1x1!
+                                     nn.Conv2d(256, in_channels, 1),
+                                     nn.Conv2d(256, in_channels, 1),
+                                     nn.Conv2d(128, in_channels, 1),
+                                     nn.Conv2d(64, in_channels, 1),
+                                     nn.Conv2d(32, in_channels, 1),
+                                     nn.Conv2d(32, in_channels, 1),
+                                     nn.Conv2d(in_channels, in_channels, 1)])
+
+    def forward(self, input):
+        for i, (conv, to_rgb) in enumerate(zip(self.dec_net, self.to_rgb)):
+            if i == 0:
+                out = conv(input)
+            else:
+                out = conv(out)
+            if i == self.config['phase']:
+                if i > 0 and self.config['status'] == 'fadein':
+                    skip_rgb = to_rgb(out)
+                    out = to_rgb(out)
+                    out = self.config['alpha'] * skip_rgb + (1 - self.config['alpha']) * out # alpha descreses from 1 to 0 
+                elif i != len(self.dec_net)-1: # Stable and not the last layer.
+                    out = to_rgb(out)
+                break
+        return torch.tanh(out)
 
 
 def instantiate_autoencoder(opt):
@@ -404,12 +492,20 @@ def instantiate_encoder(opt):
         return GrowingGanSynthEnc(opt['model']['timbre_latent_size'],
                         opt['model']['in_ch'],
                         feat_width= feat_width)
+    elif opt['model']['ae'] == 'growgansynth2':
+        return GrowingGanSynthEnc_2(opt['model']['timbre_latent_size'],
+                        opt['model']['in_ch'],
+                        feat_width= feat_width)
 
 def instantiate_decoder(opt):
     ref_segm_size = int(list(segment_feature_ratio.keys())[0])
     feat_width = int((opt['data']['segment_size']/ref_segm_size) * segment_feature_ratio[ref_segm_size])
     if opt['model']['ae'] == 'growgansynth':
         return GrowingGanSynthDec(opt['model']['timbre_latent_size'],
+                        opt['model']['in_ch'],
+                        feat_width= feat_width)
+    elif opt['model']['ae'] == 'growgansynth2':
+        return GrowingGanSynthDec_2(opt['model']['timbre_latent_size'],
                         opt['model']['in_ch'],
                         feat_width= feat_width)
 

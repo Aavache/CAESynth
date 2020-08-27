@@ -92,23 +92,35 @@ class ProgAEModel(BaseModel):
                 data = net_utils.down_sample2x2(data)
             current_phase -= 1
         return data.detach()
+    
+    def print_net_status(self):
+        print("Net status has changed to: status: {}, phase: {}, alpha: {}".format(self.net_status, \
+                        self.net_phase, self.net_alpha))
 
     def update_net_status(self):
         self.iters += 1
+        has_status_changed = False
         if self.net_phase == self.max_phase:
             if self.net_status == "fadein":
-                self.net_status = "stable" if self.iters % self.fadein_iters == 0 else "fadein"
+                if self.iters % self.fadein_iters == 0:
+                    self.net_status = "stable"
+                    has_status_changed = True
         elif self.net_phase == 0:
             if self.iters % self.stable_iters == 0:
                 self.net_status = "fadein"
                 self.net_phase += 1
+                has_status_changed = True
         else:
             if self.net_status == "stable":
                 if self.iters % self.stable_iters == 0:
                     self.net_status = "fadein"
                     self.net_phase += 1
+                    has_status_changed = True
+
             else: # "fadein" 
-                self.net_status = "stable" if self.iters % self.fadein_iters == 0 else "fadein"
+                if self.iters % self.fadein_iters == 0:
+                    self.net_status = "stable"
+                    has_status_changed = True
         
         if self.net_status == "fadein":
             fadein_perc = (self.iters % self.fadein_iters)/self.fadein_iters
@@ -119,6 +131,9 @@ class ProgAEModel(BaseModel):
         current_config = {'phase': self.net_phase, 'alpha': self.net_alpha, 'status':self.net_status}
         self.encoder.config = current_config
         self.decoder.config = current_config
+
+        if has_status_changed:
+            self.print_net_status()
     
     def backward_enc(self):
         # minimizing the KL (real_latent, N(0,I))
