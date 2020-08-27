@@ -47,11 +47,13 @@ class NSynth(data.Dataset):
 
     def __init__(self, opt):
         """Constructor"""
+        # Loading options
         self.shuffle = opt['train']['epoch_shuffle']
         self.root = opt['data']['data_path']
         self.include_phase = True if opt['model']['in_ch'] == 2 else False 
         self.segment_size = opt['data']['segment_size']
         self.sample_size = opt['data'].get('sample_size', 2)
+        self.apply_if_mel = opt['data'].get('apply_if_mel', True)
         #self.filenames = glob.glob(os.path.join(self.root, "audio/*.wav"))
 
         self.df = pd.read_json(os.path.join(os.path.join(self.root, opt['data']['meta_file'])), orient='index')
@@ -84,20 +86,21 @@ class NSynth(data.Dataset):
     
     def arrange_feature(self, path, pitch):
         _, sample = scipy.io.wavfile.read(path)
+        sample = sample/ np.iinfo(np.int16).max
         sample = sample.astype(np.float)
         sample = self.window_sample(sample, self.segment_size)
 
         if self.include_phase:
-            logmel, mel_p = self.compute_features(sample)
-            mel_p = torch.from_numpy(mel_p).float()
-            mel_p = mel_p.unsqueeze(0)
-            logmel = torch.from_numpy(logmel).float()
-            logmel = logmel.unsqueeze(0)
-            data = torch.cat([logmel, mel_p], dim = 0)
+            mag, IF = self.compute_features(sample)
+            mag = torch.from_numpy(mag).float()
+            mag = mag.unsqueeze(0)
+            IF = torch.from_numpy(IF).float()
+            IF = IF.unsqueeze(0)
+            data = torch.cat([mag, IF], dim = 0)
         else:
-            logmel = self.compute_features(sample)
-            logmel = torch.from_numpy(logmel).float()
-            data = logmel.unsqueeze(0)
+            mag = self.compute_features(sample)
+            mag = torch.from_numpy(mag).float()
+            data = mag.unsqueeze(0)
 
         # Normalize features
         data = self.data_norm.normalize(data)#.to(self.device))
@@ -108,17 +111,20 @@ class NSynth(data.Dataset):
     def compute_features(self, sample):
         spec = librosa.stft(sample, n_fft=2048, hop_length = 512)
         
-        magnitude = np.log(np.abs(spec)+ 1.0e-6)[:1024]
-        magnitude = expand(magnitude)
+        mag = np.log(np.abs(spec)+ 1.0e-6)[:1024]
+        mag = expand(mag)
         if self.include_phase:
             angle =np.angle(spec)
             IF = sign_op.instantaneous_frequency(angle, time_axis=1)[:1024]
             IF = expand(IF)
-            logmel, mel_p = sign_op.specgrams_to_melspecgrams(magnitude, IF)
-            return logmel, mel_p
+            if self.apply_if_mel:
+                mag, IF = sign_op.specgrams_to_melspecgrams(mag, IF)
+            else:
+                mag = sign_op.specgrams_to_melspecgrams(mag, IF=None)
+            return mag, IF
         else:
-            logmel = sign_op.specgrams_to_melspecgrams(magnitude)
-            return logmel
+            mag = sign_op.specgrams_to_melspecgrams(mag)
+            return mag
     
     def __getitem__(self, index):
         """
