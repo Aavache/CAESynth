@@ -177,14 +177,14 @@ def specgrams_to_melspecgrams(magnitude, IF=None):
     mag2 = np.array([mag2])
     l2mel = _linear_to_mel_matrix()
 
-    logmelmag2 = np.log(np.tensordot(mag2,l2mel,axes=1) + 1e-6)
+    logmelmag2 = np.log(np.tensordot(mag2, l2mel, axes=1) + 1e-6)
 
     if IF is not None:
         p = IF.T
         phase_angle = np.cumsum(p * np.pi, axis=1)
         phase_angle = np.array([phase_angle])
         mel_phase_angle = np.tensordot(phase_angle, l2mel, axes=1)
-        mel_p = instantaneous_frequency(mel_phase_angle,time_axis=1)
+        mel_p = instantaneous_frequency(mel_phase_angle, time_axis=1)
         return logmelmag2[0].T, mel_p[0].T
     else:
         return logmelmag2[0].T
@@ -231,33 +231,23 @@ def unwrap(p, discont=np.pi, axis=-1):
     unwrapped: Unwrapped tensor of same size as input.
     """
     dd = diff(p, axis=axis)
-#     print("dd",dd)
     ddmod = np.mod(dd+np.pi,2.0*np.pi)-np.pi  # ddmod = tf.mod(dd + np.pi, 2.0 * np.pi) - np.pi
-#     print("ddmod",ddmod)
 
     idx = np.logical_and(np.equal(ddmod, -np.pi),np.greater(dd,0)) # idx = tf.logical_and(tf.equal(ddmod, -np.pi), tf.greater(dd, 0))
-#     print("idx",idx)
     ddmod = np.where(idx, np.ones_like(ddmod) *np.pi, ddmod) # ddmod = tf.where(idx, tf.ones_like(ddmod) * np.pi, ddmod)
-#     print("ddmod",ddmod)
     ph_correct = ddmod - dd
-#     print("ph_corrct",ph_correct)
     
     idx = np.less(np.abs(dd), discont) # idx = tf.less(tf.abs(dd), discont)
     
     ddmod = np.where(idx, np.zeros_like(ddmod), dd) # ddmod = tf.where(idx, tf.zeros_like(ddmod), dd)
     ph_cumsum = np.cumsum(ph_correct, axis=axis) # ph_cumsum = tf.cumsum(ph_correct, axis=axis)
-#     print("idx",idx)
-#     print("ddmod",ddmod)
-#     print("ph_cumsum",ph_cumsum)
     
     
     shape = np.array(p.shape) # shape = p.get_shape().as_list()
 
     shape[axis] = 1
     ph_cumsum = np.concatenate([np.zeros(shape, dtype=p.dtype), ph_cumsum], axis=axis) 
-    #ph_cumsum = tf.concat([tf.zeros(shape, dtype=p.dtype), ph_cumsum], axis=axis)
     unwrapped = p + ph_cumsum
-#     print("unwrapped",unwrapped)
     return unwrapped
 
 
@@ -272,45 +262,32 @@ def instantaneous_frequency(phase_angle, time_axis):
     dphase: Instantaneous frequency (derivative of phase). Same size as input.
     """
     phase_unwrapped = unwrap(phase_angle, axis=time_axis)
-#     print("phase_unwrapped",phase_unwrapped.shape)
     
     dphase = diff(phase_unwrapped, axis=time_axis)
-#     print("dphase",dphase.shape)
     
     # Add an initial phase to dphase
     size = np.array(phase_unwrapped.shape)
-#     size = phase_unwrapped.get_shape().as_list()
+#   size = phase_unwrapped.get_shape().as_list()
 
     size[time_axis] = 1
-#     print("size",size)
     begin = [0 for unused_s in size]
-#     phase_slice = tf.slice(phase_unwrapped, begin, size)
-#     print("begin",begin)
     phase_slice = phase_unwrapped[begin[0]:begin[0]+size[0], begin[1]:begin[1]+size[1]]
-#     print("phase_slice",phase_slice.shape)
     dphase = np.concatenate([phase_slice, dphase], axis=time_axis) / np.pi
 
-#     dphase = tf.concat([phase_slice, dphase], axis=time_axis) / np.pi
     return dphase
 
 
 def polar2rect(mag, phase_angle):
     """Convert polar-form complex number to its rectangular form."""
-#     mag = np.complex(mag)
     temp_mag = np.zeros(mag.shape,dtype=np.complex_)
     temp_phase = np.zeros(mag.shape,dtype=np.complex_)
 
     for i, time in enumerate(mag):
         for j, time_id in enumerate(time):
-#             print(mag[i,j])
             temp_mag[i,j] = np.complex(mag[i,j])
-#             print(temp_mag[i,j])
     
     for i, time in enumerate(phase_angle):
         for j, time_id in enumerate(time):
             temp_phase[i,j] = np.complex(np.cos(phase_angle[i,j]), np.sin(phase_angle[i,j]))
-#             print(temp_mag[i,j])
     
-#     phase = np.complex(np.cos(phase_angle), np.sin(phase_angle))
-   
     return temp_mag * temp_phase
