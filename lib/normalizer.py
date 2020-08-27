@@ -7,10 +7,21 @@ class DataNormalizer(object):
     def __init__(self, dataloader):
         self.dataloader = dataloader
         print('WARNING. Normalization parameters are hardcoded!')
-        self.p_a = 0.0034997
-        self.p_b = -0.010897
-        self.s_a = 0.060437
-        self.s_b = 0.034964
+        # When wav is normalized [-1,1]
+        self.s_a = 0.0612 
+        self.s_b = 0.0449
+        if not self.dataloader.apply_if_mel:
+            self.p_a = 1
+            self.p_b = 0
+        else:
+            self.p_a = 0.0023
+            self.p_b = -0.0067 
+
+        # When wav is NOT normalized
+        #self.p_a = 0.0026 
+        #self.p_b = 0.0185 
+        #self.s_a = 0.0341 
+        #self.s_b = -0.3292 
         if self.dataloader.include_phase:
             #self._range_normalizer_with_IF(magnitude_margin=0.8, IF_margin=1.0)
             print("p_a:", self.p_a)
@@ -42,8 +53,8 @@ class DataNormalizer(object):
 
         for batch_idx, data in enumerate(self.dataloader):
             # training mel
-            spec = data['src_data'][0,:,:]
-            IF = data['src_data'][1,:,:]
+            spec = data['data'][0,:,:]
+            IF = data['data'][1,:,:]
             if spec.min() < min_spec: min_spec=spec.min()
             if spec.max() > max_spec: max_spec=spec.max()
 
