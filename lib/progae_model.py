@@ -154,7 +154,7 @@ class ProgAEModel(BaseModel):
                         self.loss_r_kl_min + self.loss_f_kl_max)
 
         # Compute the total loss and backward the loss
-        total_loss = self.loss_r_kl_min + kl_loss
+        total_loss = kl_loss + self.loss_recon
         total_loss.backward(retain_graph=True)
 
     def backward_dec(self):
