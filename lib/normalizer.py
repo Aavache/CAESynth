@@ -87,10 +87,14 @@ class DataNormalizer(object):
 
         return feature_map
     
-    def denormalize(self, spec, s_a, s_b):
-        spec = (spec -s_b) / s_a
+    def denormalize(self, spec, s_a=None, s_b=None):
+        if s_a is None or s_b is None:
+            s_a, s_b = self.s_a, self.s_b
+        spec = (spec - s_b) / s_a
         return spec
 
-    def denormalize_IF(self, IF, p_a, p_b):
+    def denormalize_IF(self, IF, p_a=None, p_b=None):
+        if p_a is None or p_b is None:
+            p_a, p_b = self.p_a, self.p_b
         IF = (IF - p_b) / p_a
         return IF
