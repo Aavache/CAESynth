@@ -242,7 +242,7 @@ class GanSynthAE(nn.Module):
 
     def forward(self, input, cond=None):
         latent = self.enc_net(input)
-        out = self.dec_net(latent)
+        out = torch.tanh(self.dec_net(latent))
         
         return out, latent
 
