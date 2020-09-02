@@ -1,11 +1,12 @@
 {
-    "experiment_name": "ae_gansynth_if_nsynth_recon10",
+    "experiment_name": "ae_gansynth_if_fade_nsynth_recon10",
     "data": {
         "dataset": "nsynth",
         "data_path": "./data/nsynth/nsynth-train",
         "meta_file": "examples.json",
         "inst": ["mallet","string","brass","reed", "flute"],
         "apply_if_mel": false,
+        "if_atten": "mask",
         "pitch_size": 128,
         "sample_size": 2,
         "segment_size": 64000
@@ -25,7 +26,7 @@
         "beta1": 0.9,
         "save_epoch_freq": 10,
         "lambda_recon": 10.0,
-        "devices": [2],
+        "devices": [0],
         "batch_size": 1,
         "print_freq": 50,
         "save_latest_freq": 5000, 

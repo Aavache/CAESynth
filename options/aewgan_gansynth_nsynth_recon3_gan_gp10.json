@@ -1,5 +1,5 @@
 {
-    "experiment_name": "ae_gansynth_if_nsynth_recon10",
+    "experiment_name": "aewgan_gansynth_nsynth_recon3_gan_gp10",
     "data": {
         "dataset": "nsynth",
         "data_path": "./data/nsynth/nsynth-train",
@@ -7,12 +7,13 @@
         "inst": ["mallet","string","brass","reed", "flute"],
         "apply_if_mel": false,
         "pitch_size": 128,
-        "sample_size": 2,
+        "sample_size":1,
         "segment_size": 64000
     },
     "model": {
-        "name": "ae",
+        "name": "aegan",
         "ae": "gansynth",
+        "disc": "gansynth",
         "in_ch": 2,
         "timbre_latent_size": 512,
         "pitch_latent_size": 0
@@ -24,8 +25,10 @@
         "lr": 1e-4,
         "beta1": 0.9,
         "save_epoch_freq": 10,
-        "lambda_recon": 10.0,
-        "devices": [2],
+        "lambda_recon": 3.0,
+        "lambda_gan": 1.0,
+        "lambda_gp": 10.0,
+        "devices": [0],
         "batch_size": 1,
         "print_freq": 50,
         "save_latest_freq": 5000, 
@@ -34,6 +37,7 @@
         "seed": 1234,
         "n_threads": 1,
         "recon_mode": "l1",
+        "gan_mode": "wgangp",
         "checkpoints_dir": "checkpoints"
     },
     "test": {
