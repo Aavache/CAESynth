@@ -18,10 +18,15 @@ class DataNormalizer(object):
             self.p_b = -0.0067 
 
         # When wav is NOT normalized
-        #self.p_a = 0.0026 
-        #self.p_b = 0.0185 
-        #self.s_a = 0.0341 
+        #self.p_a = 0.0026
+        #self.p_b = 0.0185
+        #self.s_a = 0.0341
         #self.s_b = -0.3292 
+        
+        #self.p_a = 0.0034997 # to erase
+        #self.p_b = -0.010897 # to erase
+        #self.s_a = 0.060437 # to erase
+        #self.s_b = 0.034964 # to erase
         if self.dataloader.include_phase:
             #self._range_normalizer_with_IF(magnitude_margin=0.8, IF_margin=1.0)
             print("p_a:", self.p_a)
