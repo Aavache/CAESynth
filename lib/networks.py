@@ -245,6 +245,63 @@ class GanSynthAE(nn.Module):
         out = torch.tanh(self.dec_net(latent))
         
         return out, latent
+    
+class FC1(nn.Module):
+    def __init__(self, input_size=1024, output_size=1024):
+        super(FC1, self).__init__()
+        net = [] 
+        net += [nn.Linear(input_size,1024)]
+        net += [nn.Tanh()]
+        net += [nn.Linear(1024,1024)]
+        net += [nn.Tanh()]
+        net += [nn.Linear(1024,1024)]
+        net += [nn.Tanh()]
+        net += [nn.Linear(1024,output_size)]
+        self.m2p_net = nn.Sequential(*net)
+    
+    def forward(self, input):
+        return self.m2p_net(input)
+
+class ResConv1(nn.Module):
+    def __init__(self, input_size=1024, output_size=1024):
+        super(ResConv1, self).__init__()
+        self.conv1x1_start = nn.Conv1d(1,32, (1,1))
+        self.b1_ly1 = nn.Conv1d(32,32, (5,5),(2,2))
+        self.b1_ly2 = nn.Conv1d(32,32, (5,5),(2,2))
+        self.b2_ly1 = nn.Conv1d(32,32, (5,5),(2,2))
+        self.b2_ly2 = nn.Conv1d(32,32, (5,5),(2,2))
+        self.b3_ly1 = nn.Conv1d(32,32, (5,5),(2,2))
+        self.b3_ly2 = nn.Conv1d(32,32, (5,5),(2,2))
+        self.b4_ly1 = nn.Conv1d(32,32, (5,5),(2,2))
+        self.b4_ly2 = nn.Conv1d(32,32, (5,5),(2,2))
+        self.b5_ly1 = nn.Conv1d(32,32, (5,5),(2,2))
+        self.b5_ly2 = nn.Conv1d(32,32, (5,5),(2,2))
+        self.b6_ly1 = nn.Conv1d(32,32, (5,5),(2,2))
+        self.b6_ly2 = nn.Conv1d(32,32, (5,5),(2,2))
+        self.conv1x1_end = nn.Conv1d(32,1, (1,1))
+    
+    def forward(self, input):
+        h_start = self.conv1x1_start(input)
+        h_b1 = torch.tanh(self.b1_ly1(h_start))
+        h_b1 = self.b1_ly2(h_b1) + h_start
+
+        h_b2 = torch.tanh(self.b2_ly1(h_b1))
+        h_b2 = self.b2_ly2(h_b2) + h_b1
+
+        h_b3 = torch.tanh(self.b3_ly1(h_b2))
+        h_b3 = self.b3_ly2(h_b3) + h_b2
+
+        h_b4 = torch.tanh(self.b4_ly1(h_b3))
+        h_b4 = self.b4_ly2(h_b4) + h_b3
+
+        h_b5 = torch.tanh(self.b5_ly1(h_b4))
+        h_b5 = self.b5_ly2(h_b5) + h_b4
+
+        h_b6 = torch.tanh(self.b6_ly1(h_b5))
+        h_b6 = self.b6_ly2(h_b6) + h_b5
+
+        out = self.conv1x1_end(h_b6)
+        return out
 
 class GanSynthDisc(nn.Module):
     ''' 
@@ -518,6 +575,19 @@ def instantiate_discriminator(opt):
     """ 
     if opt['model']['disc'] == 'gansynth':
         return GanSynthDisc(opt['model']['in_ch'])
+    else:
+        raise NotImplementedError
+
+def instantiate_mag2phase(opt):
+    """ Given the options file, it instantiate a magnitude to phase model.
+    Parameters:s
+        opt (Dictionary): Options.
+    Returns:
+        m2p instance.
+    """ 
+    if opt['model']['m2p'] == 'fc1':
+        return FC1(opt['model']['in_size'],
+                    opt['model']['out_size'])
     else:
         raise NotImplementedError
 
