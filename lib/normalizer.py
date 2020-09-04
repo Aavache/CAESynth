@@ -10,13 +10,29 @@ class DataNormalizer(object):
         # When wav is normalized [-1,1]
         self.s_a = 0.0612 
         self.s_b = 0.0449
-        if not self.dataloader.apply_if_mel:
+        if self.dataloader.phase_format == 'phase':
+            self.p_a = 1 # 0.3183
+            self.p_b = 0 # 0.
+        elif self.dataloader.phase_format == 'unwrap':
+            self.p_a = 0.0026
+            self.p_b = -0.0023       
+        elif self.dataloader.phase_format == 'if':
             self.p_a = 1
             self.p_b = 0
-        else:
+        elif self.dataloader.phase_format == 'mel_if':
             self.p_a = 0.0023
             self.p_b = -0.0067 
-
+        else:
+            raise NotImplementedError
+            
+        if self.dataloader.mag_format == 'log':
+            self.s_a = 0.0795
+            self.s_b = 0.2990
+        elif self.dataloader.mag_format == 'mel':
+            self.s_a = 0.0612 
+            self.s_b = 0.0449
+        else:
+            raise NotImplementedError           
         # When wav is NOT normalized
         #self.p_a = 0.0026
         #self.p_b = 0.0185
@@ -28,56 +44,37 @@ class DataNormalizer(object):
         #self.s_a = 0.060437 # to erase
         #self.s_b = 0.034964 # to erase
         if self.dataloader.include_phase:
-            #self._range_normalizer_with_IF(magnitude_margin=0.8, IF_margin=1.0)
+            #self._range_normalizer(magnitude_margin=0.8, phase_margin=1.0)
             print("p_a:", self.p_a)
             print("p_b:", self.p_b)
-        #else:
-           #self._range_normalizer(magnitude_margin=0.8) 
         print("s_a:", self.s_a)
         print("s_b:", self.s_b)
 
-    def _range_normalizer(self, magnitude_margin):
+    def _range_normalizer(self, magnitude_margin, phase_margin):
         min_spec = 10000
         max_spec = -10000
-
-        for batch_idx, data in enumerate(self.dataloader):
-            # training mel
-            spec = data['src_data'][0,:,:]
-            if spec.min() < min_spec: min_spec=spec.min()
-            if spec.max() > max_spec: max_spec=spec.max()
-            #if batch_idx > 100:
-            #    break
-        self.s_a = magnitude_margin * (2.0 / (max_spec - min_spec))
-        self.s_b = magnitude_margin * (-2.0 * min_spec / (max_spec - min_spec) - 1.0)
-
-    def _range_normalizer_with_IF(self, magnitude_margin, IF_margin):
-        min_spec = 10000
-        max_spec = -10000
-        min_IF = 10000
-        max_IF = -10000
+        min_ph = 10000
+        max_ph = -10000
 
         for batch_idx, data in enumerate(self.dataloader):
             # training mel
             spec = data['data'][0,:,:]
-            IF = data['data'][1,:,:]
+            ph = data['data'][1,:,:]
             if spec.min() < min_spec: min_spec=spec.min()
             if spec.max() > max_spec: max_spec=spec.max()
 
-            if IF.min() < min_IF: min_IF=IF.min()
-            if IF.max() > max_IF: max_IF=IF.max()
+            if ph.min() < min_ph: min_ph=ph.min()
+            if ph.max() > max_ph: max_ph=ph.max()
             if batch_idx % 1000 == 0:
-                print(batch_idx)
-            #if batch_idx > 100:
-            #    break
-        print(min_spec)
-        print(max_spec)
-        print(min_IF)
-        print(max_IF)
+                print("Iter: {}, Min Mag: {}, Max Mag: {}, Min Phase: {}, Max Phase: {}".format(batch_idx, \
+                            min_spec, max_spec, min_ph, max_ph))
+        print("Done! >> Min Mag: {}, Max Mag: {}, Min Phase: {}, Max Phase: {}".format(min_spec, \
+                            max_spec, min_ph, max_ph))
         self.s_a = magnitude_margin * (2.0 / (max_spec - min_spec))
         self.s_b = magnitude_margin * (-2.0 * min_spec / (max_spec - min_spec) - 1.0)
         
-        self.p_a = IF_margin * (2.0 / (max_IF - min_IF))
-        self.p_b = IF_margin * (-2.0 * min_IF / (max_IF - min_IF) - 1.0)
+        self.p_a = phase_margin * (2.0 / (max_ph - min_ph))
+        self.p_b = phase_margin * (-2.0 * min_ph / (max_ph - min_ph) - 1.0)
 
     def normalize(self, feature_map):
         if self.dataloader.include_phase:
