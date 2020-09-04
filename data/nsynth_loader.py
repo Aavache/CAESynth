@@ -53,8 +53,14 @@ class NSynth(data.Dataset):
         self.include_phase = True if opt['model']['in_ch'] == 2 else False 
         self.segment_size = opt['data']['segment_size']
         self.sample_size = opt['data'].get('sample_size', 2)
-        self.apply_if_mel = opt['data'].get('apply_if_mel', True)
-        #self.filenames = glob.glob(os.path.join(self.root, "audio/*.wav"))
+        self.mag_format = opt['data'].get('mag_format', 'mel')
+        self.phase_format = opt['data'].get('phase_format', 'mel_if')
+        self.if_atten = opt['data'].get('if_atten', None)
+
+        # STFT paremeters
+        self.n_fft = opt['data'].get('n_fft', 2048)
+        self.hop = opt['data'].get('hop', 512)
+        self.win_len = opt['data'].get('win_len', 2048)
 
         self.df = pd.read_json(os.path.join(os.path.join(self.root, opt['data']['meta_file'])), orient='index')
         self.df['file'] = self.df.index
@@ -84,6 +90,23 @@ class NSynth(data.Dataset):
             samples = samples[idx:idx + window_size]
         return samples
     
+    def attenuate_phase(self, data):
+        '''We attenuate the phase information by the 
+        '''
+        if self.if_atten is None:
+            return data
+        elif self.if_atten == 'fade':
+            mag = data[0,:,:]
+            fader = (mag - mag.min())/(mag.max() - mag.min()) # Normalize 0 to 1
+            data[1,:,:] = data[1,:,:] * fader
+        elif self.if_atten == 'mask':
+            mag = data[0,:,:]
+            fader = (mag - mag.min())/(mag.max() - mag.min()) # Normalize 0 to 1
+            mask = torch.zeros_like(mag)
+            mask[fader>0.5] = 1
+            data[1,:,:] = data[1,:,:] * mask
+        return data
+    
     def arrange_feature(self, path, pitch):
         _, sample = scipy.io.wavfile.read(path)
         sample = sample/ np.iinfo(np.int16).max
@@ -91,12 +114,12 @@ class NSynth(data.Dataset):
         sample = self.window_sample(sample, self.segment_size)
 
         if self.include_phase:
-            mag, IF = self.compute_features(sample)
+            mag, phase = self.compute_features(sample)
             mag = torch.from_numpy(mag).float()
             mag = mag.unsqueeze(0)
-            IF = torch.from_numpy(IF).float()
-            IF = IF.unsqueeze(0)
-            data = torch.cat([mag, IF], dim = 0)
+            phase = torch.from_numpy(phase).float()
+            phase = phase.unsqueeze(0)
+            data = torch.cat([mag, phase], dim = 0)
         else:
             mag = self.compute_features(sample)
             mag = torch.from_numpy(mag).float()
@@ -105,26 +128,42 @@ class NSynth(data.Dataset):
         # Normalize features
         data = self.data_norm.normalize(data)#.to(self.device))
 
+        # Fading Phase
+        data = self.attenuate_phase(data)
+
         pitch = to_one_hot(128, int(pitch))#.to(self.device)
         return data, pitch
 
     def compute_features(self, sample):
-        spec = librosa.stft(sample, n_fft=2048, hop_length = 512)
+        spec = librosa.stft(sample, n_fft=self.n_fft, \
+                hop_length = self.hop, win_length=self.win_len)
         
-        mag = np.log(np.abs(spec)+ 1.0e-6)[:1024]
+        mag = np.log(np.abs(spec)+ 1.0e-6)[:self.n_fft//2]
         mag = expand(mag)
+        if self.mag_format == 'mel':
+            mag = sign_op.specgrams_to_melspecgrams(magnitude = mag)
+
         if self.include_phase:
-            angle =np.angle(spec)
-            IF = sign_op.instantaneous_frequency(angle, time_axis=1)[:1024]
-            IF = expand(IF)
-            if self.apply_if_mel:
-                mag, IF = sign_op.specgrams_to_melspecgrams(mag, IF)
+            angle = np.angle(spec)
+            if self.phase_format == 'phase':
+                angle = expand(angle)[:self.n_fft//2]                 
+                return mag, angle
+            elif self.phase_format == 'unwrap':
+                unwrapped_phase = sign_op.unwrap(angle)
+                unwrapped_phase = expand(unwrapped_phase)[:self.n_fft//2]                
+                return mag, unwrapped_phase
+            elif self.phase_format == 'if':
+                IF = sign_op.instantaneous_frequency(angle, time_axis=1)[:self.n_fft//2]
+                IF = expand(IF)
+                return mag, IF
+            elif self.phase_format == 'mel_if':
+                IF = sign_op.instantaneous_frequency(angle, time_axis=1)[:self.n_fft//2]
+                IF = expand(IF)
+                _, mel_if = sign_op.specgrams_to_melspecgrams(IF=IF)
+                return mag, mel_if
             else:
-                mag = sign_op.specgrams_to_melspecgrams(mag, IF=None)
-            return mag, IF
-        else:
-            mag = sign_op.specgrams_to_melspecgrams(mag)
-            return mag
+                raise NotImplementedError
+        return mag
     
     def __getitem__(self, index):
         """
