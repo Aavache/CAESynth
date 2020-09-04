@@ -162,8 +162,7 @@ def melspecgrams_to_specgrams(logmelmag2 = None, mel_p = None):
         p = p[0].T
     return logmag, p
 
-
-def specgrams_to_melspecgrams(magnitude, IF=None):
+def specgrams_to_melspecgrams(magnitude=None, IF=None):
     """Converts specgrams to melspecgrams.
     Args:
       specgrams: Tensor of log magnitudes and instantaneous frequencies,
@@ -172,12 +171,15 @@ def specgrams_to_melspecgrams(magnitude, IF=None):
       melspecgrams: Tensor of log magnitudes and instantaneous frequencies,
         shape [freq, time], mel scaling of frequencies.
     """
-    logmag = magnitude.T
-    mag2 = np.exp(2.0 * logmag)
-    mag2 = np.array([mag2])
+    logmelmag = None
+    mel_p = None
     l2mel = _linear_to_mel_matrix()
-
-    logmelmag2 = np.log(np.tensordot(mag2, l2mel, axes=1) + 1e-6)
+    if magnitude is not None:
+        logmag = magnitude.T
+        mag2 = np.exp(2.0 * logmag)
+        mag2 = np.array([mag2])
+        logmelmag2 = np.log(np.tensordot(mag2, l2mel, axes=1) + 1e-6)
+        logmelmag2 = logmelmag2[0].T 
 
     if IF is not None:
         p = IF.T
@@ -185,9 +187,9 @@ def specgrams_to_melspecgrams(magnitude, IF=None):
         phase_angle = np.array([phase_angle])
         mel_phase_angle = np.tensordot(phase_angle, l2mel, axes=1)
         mel_p = instantaneous_frequency(mel_phase_angle, time_axis=1)
-        return logmelmag2[0].T, mel_p[0].T
-    else:
-        return logmelmag2[0].T
+        mel_p = mel_p[0].T
+
+    return logmelmag, mel_p
 
 
 # *********************************************************************#
@@ -267,7 +269,7 @@ def instantaneous_frequency(phase_angle, time_axis):
     
     # Add an initial phase to dphase
     size = np.array(phase_unwrapped.shape)
-#   size = phase_unwrapped.get_shape().as_list()
+    # size = phase_unwrapped.get_shape().as_list()
 
     size[time_axis] = 1
     begin = [0 for unused_s in size]
