@@ -47,13 +47,11 @@ class AEModel(BaseModel):
                 print('Network Loaded!')
     
     def set_input(self, data):
-        self.x = data['src_data'].to(self.device)
-        self.y = data['trg_data'].to(self.device)
+        self.data = data['data'].to(self.device)
 
     def forward(self):
         """Run forward pass"""
-        self.recon_src,  self.z_src = self.AE(self.x)
-        self.recon_trg,  self.z_trg = self.AE(self.y) 
+        self.recon, _ = self.AE(self.data)
 
     def generate(self, data):
         with torch.no_grad():
@@ -62,8 +60,7 @@ class AEModel(BaseModel):
     
     def backward_AE(self):
         # Reconstruction loss
-        self.loss_recon = self.criterion_recon(self.recon_src, self.x)* self.lambda_recon
-        self.loss_recon += self.criterion_recon(self.recon_trg, self.y)* self.lambda_recon
+        self.loss_recon = self.criterion_recon(self.recon[:,1,:,:], self.data[:,1,:,:])* self.lambda_recon
 
         self.loss_recon.backward()
 
