@@ -5,7 +5,7 @@
         "data_path": "./data/nsynth/nsynth-train",
         "meta_file": "examples.json",
         "inst": ["mallet","string","brass","reed", "flute"],
-        "apply_if_mel": false,
+        "phase_format": "if",
         "pitch_size": 128,
         "sample_size": 2,
         "segment_size": 64000

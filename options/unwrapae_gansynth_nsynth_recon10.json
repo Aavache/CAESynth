@@ -1,18 +1,17 @@
 {
-    "experiment_name": "ae_gansynth_if_fade_nsynth_recon10",
+    "experiment_name": "unwrapae_gansynth_nsynth_recon10",
     "data": {
         "dataset": "nsynth",
         "data_path": "./data/nsynth/nsynth-train",
         "meta_file": "examples.json",
         "inst": ["mallet","string","brass","reed", "flute"],
-        "phase_format": "if",
-        "if_atten": "mask",
+        "phase_format": "unwrap",
         "pitch_size": 128,
-        "sample_size": 2,
+        "sample_size":1,
         "segment_size": 64000
     },
     "model": {
-        "name": "ae",
+        "name": "phaseae",
         "ae": "gansynth",
         "in_ch": 2,
         "timbre_latent_size": 512,
