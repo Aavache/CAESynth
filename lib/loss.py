@@ -110,6 +110,13 @@ class CosDistance(nn.Module):
 
         ret = 2 - (x_norm).mul(y_norm)
         return ret.mean(dim=1).mean()
+    
+class VonMisesDist(nn.Module):
+    def __init__(self):
+        super(VonMisesDist, self).__init__()
+    
+    def forward(self, x, y):
+        return (-torch.sum(torch.cos(y - x)))/(x.size(0)*x.size(1))
 
 class Distance(nn.Module):
     def __init__(self, mode):
@@ -120,6 +127,8 @@ class Distance(nn.Module):
             self.criterion = nn.MSELoss()
         elif mode == 'cos':
             self.criterion = CosDistance()
+        elif mode == 'von-mises':
+            self.criterion = VonMisesDist()
         else:
             raise NotImplementedError
 
