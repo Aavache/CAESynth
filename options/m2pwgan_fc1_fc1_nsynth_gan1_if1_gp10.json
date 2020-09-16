@@ -1,5 +1,5 @@
 {
-    "experiment_name": "m2p_fc1_nsynth_if1",
+    "experiment_name": "m2pwgan_fc1_fc1_nsynth_gan1_if1_gp10",
     "data": {
         "dataset": "nsynth",
         "data_path": "./data/nsynth/nsynth-train",
@@ -15,8 +15,9 @@
         "segment_size": 64000
     },
     "model": {
-        "name": "mag2phase",
+        "name": "mag2phasegan",
         "m2p": "fc1",
+        "m2pdisc": "fc1",
         "in_ch": 2,
         "in_size": 256,
         "out_size": 256
@@ -31,7 +32,9 @@
         "lambda_recon": 0.0,
         "lambda_gd": 0.0,
         "lambda_if": 1.0,
-        "devices": [1],
+        "lambda_gan": 1.0,
+        "lambda_gp": 10.0,
+        "devices": [0],
         "batch_size": 1,
         "print_freq": 50,
         "save_latest_freq": 5000, 
@@ -40,6 +43,7 @@
         "seed": 1234,
         "n_threads": 1,
         "recon_mode": "von-mises",
+        "gan_mode": "wgangp",
         "checkpoints_dir": "checkpoints"
     },
     "test": {
