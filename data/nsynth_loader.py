@@ -141,7 +141,7 @@ class NSynth(data.Dataset):
         mag = np.log(np.abs(spec)+ 1.0e-6)[:self.n_fft//2]
         mag = expand(mag)
         if self.mag_format == 'mel':
-            mag = sign_op.specgrams_to_melspecgrams(magnitude = mag)
+            mag, _ = sign_op.specgrams_to_melspecgrams(magnitude = mag)
 
         if self.include_phase:
             angle = np.angle(spec)

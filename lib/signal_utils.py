@@ -178,8 +178,8 @@ def specgrams_to_melspecgrams(magnitude=None, IF=None):
         logmag = magnitude.T
         mag2 = np.exp(2.0 * logmag)
         mag2 = np.array([mag2])
-        logmelmag2 = np.log(np.tensordot(mag2, l2mel, axes=1) + 1e-6)
-        logmelmag2 = logmelmag2[0].T 
+        logmelmag = np.log(np.tensordot(mag2, l2mel, axes=1) + 1e-6)
+        logmelmag = logmelmag[0].T 
 
     if IF is not None:
         p = IF.T
