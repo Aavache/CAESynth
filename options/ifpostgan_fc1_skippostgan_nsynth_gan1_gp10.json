@@ -1,5 +1,5 @@
 {
-    "experiment_name": "m2pwgan_fc1_fc1_nsynth_gan1_if1_gp10",
+    "experiment_name": "ifpostgan_fc1_skippostgan_nsynth_gan1_gp10",
     "data": {
         "dataset": "nsynth",
         "data_path": "./data/nsynth/nsynth-train",
@@ -15,11 +15,12 @@
         "segment_size": 64000
     },
     "model": {
-        "name": "mag2phasegan",
+        "name": "ifpostgan",
         "m2p": "fc1",
-        "ae": "fc1",
+        "ae": "skippostcatgansynth",
         "m2pdisc": "gansynth",
         "in_ch": 2,
+        "latent_size": 512,
         "in_size": 256,
         "out_size": 256
     },
@@ -30,9 +31,6 @@
         "lr": 1e-4,
         "beta1": 0.9,
         "save_epoch_freq": 10,
-        "lambda_recon": 0.0,
-        "lambda_gd": 0.0,
-        "lambda_if": 1.0,
         "lambda_gan": 1.0,
         "lambda_gp": 10.0,
         "devices": [0],
@@ -43,7 +41,6 @@
         "batch_shuffle": true,
         "seed": 1234,
         "n_threads": 1,
-        "recon_mode": "von-mises",
         "gan_mode": "wgangp",
         "checkpoints_dir": "checkpoints"
     },
