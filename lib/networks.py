@@ -8,6 +8,7 @@ import numpy as np
 # Internal libs
 from . import network_utils as net_utils
 from . import aspp
+
 segment_feature_ratio = {64000:128}
 
 class SkipGanSynthAE(nn.Module):
@@ -65,6 +66,74 @@ class SkipGanSynthAE(nn.Module):
 
     def forward(self, input, cond=None):
         latent, skip = self.encode(input)
+        out = self.decode(latent, skip)
+
+        return out, latent
+
+class SkipPostGanSynthAE(nn.Module):
+    ''' 
+    '''
+    def __init__(self, latent_size, device, in_channels = 2, feat_width = 256, skip_op = 'add',
+                    noise_mean=0 , noise_std=1):
+        super(SkipPostGanSynthAE, self).__init__()
+        kw = feat_width//64
+        self.skip_op = skip_op
+        self.noise_mean = noise_mean
+        self.noise_std = noise_std
+        self.device = device
+        dec_ch_scale = 2 if self.skip_op == 'concat' else 1
+        self.enc_1 = nn.Conv2d(in_channels, 32, (1,1), 1)
+        self.enc_2 = nn.Sequential(*net_utils.create_gansynth_block(32, 32, 'enc'))
+        self.enc_3 = nn.Sequential(*net_utils.create_gansynth_block(32, 64, 'enc'))
+        self.enc_4 = nn.Sequential(*net_utils.create_gansynth_block(64, 128, 'enc'))
+        self.enc_5 = nn.Sequential(*net_utils.create_gansynth_block(128, 256, 'enc'))
+        self.enc_6 = nn.Sequential(*net_utils.create_gansynth_block(256, 256, 'enc'))
+        self.enc_7 = nn.Sequential(*net_utils.create_gansynth_block(256, 256, 'enc'))
+        self.enc_8 = nn.Conv2d(256, latent_size, (kw,kw), 1)
+        self.enc_net_params = list(self.enc_1.parameters()) + list(self.enc_2.parameters()) + \
+                         list(self.enc_3.parameters()) + list(self.enc_4.parameters()) + \
+                         list(self.enc_5.parameters()) + list(self.enc_6.parameters()) + \
+                         list(self.enc_7.parameters()) + list(self.enc_8.parameters())
+
+        self.dec_1 = nn.Conv2d(2*latent_size, 256, kernel_size=(kw,kw), stride=1, padding=(kw-1,(kw-1)), bias=False)
+        self.dec_2 = nn.Sequential(*net_utils.create_gansynth_block(256*dec_ch_scale, 256, 'dec'))
+        self.dec_3 = nn.Sequential(*net_utils.create_gansynth_block(256*dec_ch_scale, 256, 'dec'))
+        self.dec_4 = nn.Sequential(*net_utils.create_gansynth_block(256*dec_ch_scale, 128, 'dec'))
+        self.dec_5 = nn.Sequential(*net_utils.create_gansynth_block(128*dec_ch_scale, 64, 'dec'))
+        self.dec_6 = nn.Sequential(*net_utils.create_gansynth_block(64*dec_ch_scale, 32, 'dec'))
+        self.dec_7 = nn.Sequential(*net_utils.create_gansynth_block(32*dec_ch_scale, 32, 'dec'))
+        self.dec_8 = nn.Conv2d(32*dec_ch_scale, in_channels, kernel_size=(1,1), stride=1)
+        #self.dec_9 = nn.Conv2d(2*in_channels, in_channels, kernel_size=(1,1), stride=1)
+    
+    def encode(self, input):
+        he_1 = self.enc_1(input)
+        he_2 = self.enc_2(he_1)
+        he_3 = self.enc_3(he_2)
+        he_4 = self.enc_4(he_3)
+        he_5 = self.enc_5(he_4)
+        he_6 = self.enc_6(he_5)
+        he_7 = self.enc_7(he_6)
+        latent = self.enc_8(he_7)
+        return latent, [input, he_1,he_2,he_3,he_4,he_5,he_6,he_7]
+
+    def decode(self, latent, skip, cond=None):
+        hd_1 = self.dec_1(latent)
+        hd_2 = self.dec_2(net_utils.skip_connection(hd_1, skip[7], self.skip_op))
+        hd_3 = self.dec_3(net_utils.skip_connection(hd_2, skip[6], self.skip_op))
+        hd_4 = self.dec_4(net_utils.skip_connection(hd_3, skip[5], self.skip_op))
+        hd_5 = self.dec_5(net_utils.skip_connection(hd_4, skip[4], self.skip_op))
+        hd_6 = self.dec_6(net_utils.skip_connection(hd_5, skip[3], self.skip_op))
+        hd_7 = self.dec_7(net_utils.skip_connection(hd_6, skip[2], self.skip_op))
+        hd_8 = self.dec_8(net_utils.skip_connection(hd_7, skip[1], self.skip_op))
+        #out = self.dec_9(net_utils.skip_connection(hd_8, skip[0], 'add'))
+        out = net_utils.skip_connection(hd_8, skip[0], 'add')
+
+        return out
+
+    def forward(self, input, cond=None):
+        latent, skip = self.encode(input)
+        noise = torch.FloatTensor(latent.size()).normal_(self.noise_mean, self.noise_std).to(self.device)
+        latent = torch.cat([latent, noise], dim=1)
         out = self.decode(latent, skip)
 
         return out, latent
@@ -288,6 +357,51 @@ class GanSynthAE_2(nn.Module):
         
         return out, latent
 
+class GanSynthAE_3(nn.Module):
+    ''' 
+    Using 1024X128 features
+    '''
+    def __init__(self, latent_size, in_channels = 2, feat_width = 128):
+        super(GanSynthAE_3, self).__init__()
+        kw = feat_width//64
+        enc_layers = []
+        enc_layers += [nn.Conv2d(in_channels, 32, (1,1), 1)]
+        enc_layers += net_utils.create_gansynth_block(32, 32, 'enc')
+        enc_layers += net_utils.create_gansynth_block(32, 64, 'enc')
+        enc_layers += net_utils.create_gansynth_block(64, 128, 'enc')
+        enc_layers += net_utils.create_gansynth_block(128, 256, 'enc')
+        enc_layers += net_utils.create_gansynth_block(256, 256, 'enc')
+        enc_layers += net_utils.create_gansynth_block(256, 256, 'enc')
+        enc_layers += [nn.Conv2d(256, latent_size, (16,kw), 1)]
+        self.enc_net = nn.Sequential(*enc_layers)
+        self.enc_net_params = self.enc_net.parameters()
+
+        self.linear = nn.Linear(latent_size, latent_size)
+        dec_layers = []
+        dec_layers += [nn.Conv2d(latent_size, 256, kernel_size=(16,kw), stride=1, padding=(15,(kw//2)), bias=False)]
+        dec_layers += net_utils.create_gansynth_block(256, 256, 'dec')
+        dec_layers += net_utils.create_gansynth_block(256, 256, 'dec')
+        dec_layers += net_utils.create_gansynth_block(256, 128, 'dec')
+        dec_layers += net_utils.create_gansynth_block(128, 64, 'dec')
+        dec_layers += net_utils.create_gansynth_block(64, 32, 'dec')
+        dec_layers += net_utils.create_gansynth_block(32, 32, 'dec')
+        dec_layers += [nn.Conv2d(32, in_channels, kernel_size=(1,1), stride=1)]
+        self.dec_net = nn.Sequential(*dec_layers)
+    
+    def encode(self, input):
+        return self.enc_net(input)
+
+    def decode(self, latent):
+        h = latent.squeeze(2).squeeze(2)
+        h = self.linear(h).unsqueeze(2).unsqueeze(2)
+        return self.dec_net(h)
+
+    def forward(self, input):
+        latent = self.encode(input)
+        out = torch.tanh(self.decode(latent))
+        
+        return out, latent
+
 class FC1(nn.Module):
     def __init__(self, input_size=1024, output_size=1024):
         super(FC1, self).__init__()
@@ -299,6 +413,23 @@ class FC1(nn.Module):
         net += [nn.Linear(1024,1024)]
         net += [nn.Tanh()]
         net += [nn.Linear(1024, output_size)]
+        self.m2p_net = nn.Sequential(*net)
+    
+    def forward(self, input):
+        return self.m2p_net(input)
+
+class FC2(nn.Module):
+    def __init__(self, input_size=1024, output_size=1024):
+        super(FC2, self).__init__()
+        net = [] 
+        net += [nn.Linear(input_size,1024)]
+        net += [nn.Tanh()]
+        net += [nn.Linear(1024,1024)]
+        net += [nn.Tanh()]
+        net += [nn.Linear(1024,1024)]
+        net += [nn.Tanh()]
+        net += [nn.Linear(1024, output_size)]
+        net += [nn.Tanh()]
         self.m2p_net = nn.Sequential(*net)
     
     def forward(self, input):
@@ -620,7 +751,7 @@ class GrowingGanSynthDec(nn.Module):
         else:
             return out
 
-def instantiate_autoencoder(opt):
+def instantiate_autoencoder(opt, device=None):
     """ Given the options file, it instantiate a Decoder model.
 
     Parameters:s
@@ -648,8 +779,18 @@ def instantiate_autoencoder(opt):
         return GanSynthAE(opt['model']['timbre_latent_size'],
                         opt['model']['in_ch'],
                         feat_width= feat_width)
+    elif opt['model']['ae'] == 'gansynth_3':
+        return GanSynthAE_3(opt['model']['timbre_latent_size'],
+                        opt['model']['in_ch'])
+                        #feat_width= feat_width)
     elif opt['model']['ae'] == 'skipcatgansynth_v2':
         return SkipGanSynthAE_v2(opt['model']['timbre_latent_size'],
+                        opt['model']['in_ch'],
+                        feat_width= feat_width,
+                        skip_op='concat')
+    elif opt['model']['ae'] == 'skippostcatgansynth':
+        return SkipPostGanSynthAE(opt['model']['latent_size'],
+                        device,
                         opt['model']['in_ch'],
                         feat_width= feat_width,
                         skip_op='concat')
@@ -703,7 +844,10 @@ def instantiate_mag2phase(opt):
     """ 
     if opt['model']['m2p'] == 'fc1':
         return FC1(opt['model']['in_size'],
-                    opt['model']['out_size'])
+                opt['model']['out_size'])
+    if opt['model']['m2p'] == 'fc2':
+        return FC2(opt['model']['in_size'],
+                opt['model']['out_size'])
     elif opt['model']['m2p'] == 'rescv1':
         return ResConv1()
     elif opt['model']['m2p'] == 'gansynth':
