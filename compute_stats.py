@@ -35,7 +35,7 @@ def main():
     if len(gpu_ids) > 0:
         torch.cuda.set_device(gpu_ids[0])
     
-    NSynth(opt)  # create a dataset according to the options file
+    NSynth(opt['data'])  # create a dataset according to the options file
 
 
 if __name__ == '__main__':

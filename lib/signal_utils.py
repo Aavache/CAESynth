@@ -114,10 +114,10 @@ def linear_to_mel_weight_matrix(num_mel_bins=20,
                 'constant')
     return mel_weights_matrix
 
-def _linear_to_mel_matrix():
+def _linear_to_mel_matrix(mel_downscale=1):
     """Get the mel transformation matrix."""
     _sample_rate=16000
-    _mel_downscale=1
+    _mel_downscale = mel_downscale
     num_freq_bins = 2048 // 2
     lower_edge_hertz = 0.0
     upper_edge_hertz = 16000 / 2.0
@@ -126,16 +126,16 @@ def _linear_to_mel_matrix():
         num_mel_bins, num_freq_bins, _sample_rate, lower_edge_hertz,
         upper_edge_hertz)
 
-def _mel_to_linear_matrix():
+def _mel_to_linear_matrix(mel_downscale=1):
     """Get the inverse mel transformation matrix."""
-    m = _linear_to_mel_matrix()
+    m = _linear_to_mel_matrix(mel_downscale)
     m_t = np.transpose(m)
     p = np.matmul(m, m_t)
     d = [1.0 / x if np.abs(x) > 1.0e-8 else x for x in np.sum(p, axis=0)]
     return np.matmul(m_t, np.diag(d))
 
 
-def melspecgrams_to_specgrams(logmelmag2 = None, mel_p = None):
+def melspecgrams_to_specgrams(logmelmag2 = None, mel_p = None, mel_downscale=1):
     """Converts melspecgrams to specgrams.
     Args:
       melspecgrams: Tensor of log magnitudes and instantaneous frequencies,
@@ -144,7 +144,7 @@ def melspecgrams_to_specgrams(logmelmag2 = None, mel_p = None):
       specgrams: Tensor of log magnitudes and instantaneous frequencies,
         shape [freq, time].
     """
-    mel2l = _mel_to_linear_matrix()
+    mel2l = _mel_to_linear_matrix(mel_downscale)
     logmag = None
     p = None
     if logmelmag2 is not None:
@@ -162,7 +162,7 @@ def melspecgrams_to_specgrams(logmelmag2 = None, mel_p = None):
         p = p[0].T
     return logmag, p
 
-def specgrams_to_melspecgrams(magnitude=None, IF=None):
+def specgrams_to_melspecgrams(magnitude=None, IF=None, mel_downscale=1):
     """Converts specgrams to melspecgrams.
     Args:
       specgrams: Tensor of log magnitudes and instantaneous frequencies,
@@ -173,7 +173,7 @@ def specgrams_to_melspecgrams(magnitude=None, IF=None):
     """
     logmelmag = None
     mel_p = None
-    l2mel = _linear_to_mel_matrix()
+    l2mel = _linear_to_mel_matrix(mel_downscale)
     if magnitude is not None:
         logmag = magnitude.T
         mag2 = np.exp(2.0 * logmag)

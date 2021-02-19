@@ -10,6 +10,8 @@ class DataNormalizer(object):
         # When wav is normalized [-1,1]
         self.s_a = 0.0612 
         self.s_b = 0.0449
+        self.p_a = None
+        self.p_b = None
         if self.dataloader.phase_format == 'phase':
             self.p_a = 1 # 0.3183
             self.p_b = 0 # 0.
@@ -24,31 +26,28 @@ class DataNormalizer(object):
             self.p_b = -0.0067 
         else:
             raise NotImplementedError
-            
         if self.dataloader.mag_format == 'log':
             self.s_a = 0.0795
             self.s_b = 0.2990
         elif self.dataloader.mag_format == 'mel':
-            self.s_a = 0.0612 
-            self.s_b = 0.0449
+            # 16kHz 1024 non mel
+            # self.s_a = 0.0612 # 0.0605 16kH 256 mels
+            # self.s_b = 0.0449 # 0.0357 
+            # 16kH 256 mels GANSYNTH
+            self.s_a = 0.0605  #
+            self.s_b = 0.0357  # 
+            # 16kH 256 mels librosa
+            self.s_a = 0.0665
+            self.s_b = 0.1189
+
         else:
-            raise NotImplementedError           
-        # When wav is NOT normalized
-        #self.p_a = 0.0026
-        #self.p_b = 0.0185
-        #self.s_a = 0.0341
-        #self.s_b = -0.3292 
-        
-        #self.p_a = 0.0034997 # to erase
-        #self.p_b = -0.010897 # to erase
-        #self.s_a = 0.060437 # to erase
-        #self.s_b = 0.034964 # to erase
-        if self.dataloader.include_phase:
-            #self._range_normalizer(magnitude_margin=0.8, phase_margin=1.0)
-            print("p_a:", self.p_a)
-            print("p_b:", self.p_b)
+            raise NotImplementedError
+
+        # self._range_normalizer(magnitude_margin=0.8, phase_margin=1.0)
         print("s_a:", self.s_a)
         print("s_b:", self.s_b)
+        print("p_a:", self.p_a)
+        print("p_b:", self.p_b)
 
     def _range_normalizer(self, magnitude_margin, phase_margin):
         min_spec = 10000
@@ -59,22 +58,26 @@ class DataNormalizer(object):
         for batch_idx, data in enumerate(self.dataloader):
             # training mel
             spec = data['data'][0,:,:]
-            ph = data['data'][1,:,:]
+            #ph = data['data'][1,:,:]
             if spec.min() < min_spec: min_spec=spec.min()
             if spec.max() > max_spec: max_spec=spec.max()
 
-            if ph.min() < min_ph: min_ph=ph.min()
-            if ph.max() > max_ph: max_ph=ph.max()
+            #if ph.min() < min_ph: min_ph=ph.min()
+            #if ph.max() > max_ph: max_ph=ph.max()
             if batch_idx % 1000 == 0:
-                print("Iter: {}, Min Mag: {}, Max Mag: {}, Min Phase: {}, Max Phase: {}".format(batch_idx, \
-                            min_spec, max_spec, min_ph, max_ph))
+                #print("Iter: {}, Min Mag: {}, Max Mag: {}, Min Phase: {}, Max Phase: {}".format(batch_idx, \
+                #            min_spec, max_spec, min_ph, max_ph))
+                print("Iter: {}, Min Mag: {}, Max Mag: {}:".format(batch_idx, \
+                             min_spec, max_spec))
+            if batch_idx > 50000:
+                break
         print("Done! >> Min Mag: {}, Max Mag: {}, Min Phase: {}, Max Phase: {}".format(min_spec, \
-                            max_spec, min_ph, max_ph))
+                                max_spec, min_ph, max_ph))
         self.s_a = magnitude_margin * (2.0 / (max_spec - min_spec))
         self.s_b = magnitude_margin * (-2.0 * min_spec / (max_spec - min_spec) - 1.0)
         
-        self.p_a = phase_margin * (2.0 / (max_ph - min_ph))
-        self.p_b = phase_margin * (-2.0 * min_ph / (max_ph - min_ph) - 1.0)
+        #self.p_a = phase_margin * (2.0 / (max_ph - min_ph))
+        #self.p_b = phase_margin * (-2.0 * min_ph / (max_ph - min_ph) - 1.0)
 
     def normalize(self, feature_map):
         if self.dataloader.include_phase:

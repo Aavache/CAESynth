@@ -45,73 +45,101 @@ class NSynth(data.Dataset):
             LabelEncoder.
     """
 
-    def __init__(self, opt):
+    def __init__(self, opt, size=None, is_train=True):
         """Constructor"""
+        # Reading arguments
+        self.size=size
+        self.is_train = is_train
+
         # Loading options
-        self.shuffle = opt['train']['epoch_shuffle']
-        self.root = opt['data']['data_path']
-        self.include_phase = True if opt['model']['in_ch'] == 2 else False 
-        self.segment_size = opt['data']['segment_size']
-        self.sample_size = opt['data'].get('sample_size', 2)
-        self.mag_format = opt['data'].get('mag_format', 'mel')
-        self.phase_format = opt['data'].get('phase_format', 'mel_if')
-        self.if_atten = opt['data'].get('if_atten', None)
+        self.shuffle = opt['epoch_shuffle']
+        self.root = opt['data_path'] # ./data/nsynth/
+        if is_train:
+            self.meta_file = opt['meta_file'] # train_family_source.json
+        else: # Validation
+            self.meta_file = opt['val_meta_file'] # val_family_source.json
+        self.include_phase = opt['include_phase']
+        self.segment_size = opt['segment_size']
+        self.sample_size = opt.get('sample_size', 2)
+        self.mag_format = opt.get('mag_format', 'mel')
+        self.phase_format = opt.get('phase_format', 'if')
+        self.augmentation_enabled = opt.get('augmentation_enabled', True)
 
         # STFT paremeters
-        self.n_fft = opt['data'].get('n_fft', 2048)
-        self.hop = opt['data'].get('hop', 512)
-        self.win_len = opt['data'].get('win_len', 2048)
+        self.n_fft = opt.get('n_fft', 2048)
+        self.hop = opt.get('hop', 256)
+        self.win_len = opt.get('win_len', 2048)
+        self.window = opt.get('window', 'hann')
+        self.rate = opt.get('rate', 16000)
+        self.n_mel = opt.get('n_mel', 256)
+        self.fmin = opt.get('fmin', 27)
+        self.fmax = opt.get('fmax', 11000)
+        self.max_index_wav = int(self.rate)
 
-        self.df = pd.read_json(os.path.join(os.path.join(self.root, opt['data']['meta_file'])), orient='index')
+        self.mel_filter = librosa.filters.mel(sr=self.rate, n_fft=self.n_fft, 
+                                       n_mels=self.n_mel, fmin=self.fmin, fmax=self.fmax)
+
+        self.df = pd.read_json(os.path.join(os.path.join(self.root, self.meta_file)), orient='index')
         self.df['file'] = self.df.index
         self.df.reset_index(drop=True, inplace=True)
 
-        # Filter instrument families
-        self.inst_list = opt['data'].get('inst', None)
-        if self.inst_list is not None:
-            self.df = self.df[self.df['instrument_family_str'].isin(self.inst_list)]
-        else:
-            self.inst_list = list(self.df['instrument_family_str'].unique())
-        print('Instruments families selected: {}'.format(self.inst_list))
+        # List of available instruments
+        self.timbre_class_size = len(self.df['family_source_id'].unique())
 
-        # filter pitch < 84 and pitch  > 24 
-        self.df = self.df[(self.df['pitch'] < 84) & ( self.df['pitch'] > 24)]
+        # Filter pitch < 84 and pitch  > 24 
+        self.pitch_range = opt.get('pitch_range', [24,84])
+        self.pitch_class_size = self.pitch_range[1]
+        self.df = self.df[(self.df['pitch'] < self.pitch_range[1]) & ( self.df['pitch'] > self.pitch_range[0])]
 
         # Initializing Data Normalizer
         self.data_norm = DataNormalizer(self)
       
     def __len__(self):
-        return len(self.df)
+        if self.size is not None:
+            return self.size
+        else:
+            return len(self.df)
 
-    def window_sample(self, samples, window_size):
-        if samples.shape[0] > window_size:
-            diff = samples.shape[0] - window_size
+    def add_noise(self, samples):
+        return samples * np.random.uniform(0.98, 1.02, len(samples)) + np.random.uniform(-0.005, 0.005, len(samples))
+
+    def time_shift(self, samples):
+        start = int(np.random.uniform(-4800,4800))
+        if start >= 0:
+            return np.r_[samples[start:], np.random.uniform(-0.001, 0.001, start)]
+        else:
+            return np.r_[np.random.uniform(-0.001,0.001, -start), samples[:start]]
+    
+    def augmend_data(self, samples):
+        # if np.random.uniform(0,1) > 0.5:
+            # samples = self.add_noise(samples)
+        # if np.random.uniform(0,1) > 0.5:
+            # samples = self.time_shift(samples)s
+        # if np.random.uniform(0,1) > 0.5:
+            # samples = self.pitch_shift(samples)
+        return samples
+
+    def window_sample(self, samples):
+        if self.max_index_wav < samples.shape[0]:
+            samples = samples[:self.max_index_wav]
+        if samples.shape[0] > self.segment_size:
+            diff = samples.shape[0] - self.segment_size
             idx = random.randint(0, diff)
-            samples = samples[idx:idx + window_size]
+            samples = samples[idx:idx + self.segment_size]
         return samples
     
-    def attenuate_phase(self, data):
-        '''We attenuate the phase information by the 
-        '''
-        if self.if_atten is None:
-            return data
-        elif self.if_atten == 'fade':
-            mag = data[0,:,:]
-            fader = (mag - mag.min())/(mag.max() - mag.min()) # Normalize 0 to 1
-            data[1,:,:] = data[1,:,:] * fader
-        elif self.if_atten == 'mask':
-            mag = data[0,:,:]
-            fader = (mag - mag.min())/(mag.max() - mag.min()) # Normalize 0 to 1
-            mask = torch.zeros_like(mag)
-            mask[fader>0.5] = 1
-            data[1,:,:] = data[1,:,:] * mask
-        return data
-    
-    def arrange_feature(self, path, pitch):
-        _, sample = scipy.io.wavfile.read(path)
+    def arrange_feature(self, path):
+        # ~7 times slower than scipy
+        #sample, sr = librosa.load(path, sr= self.rate, mono = True) 
+        sr, sample = scipy.io.wavfile.read(path)
+        assert sr == self.rate
         sample = sample/ np.iinfo(np.int16).max
         sample = sample.astype(np.float)
-        sample = self.window_sample(sample, self.segment_size)
+        sample = self.window_sample(sample)
+
+        # Data augmentation
+        if self.augmentation_enabled:
+            sample = self.augmend_data(sample)
 
         if self.include_phase:
             mag, phase = self.compute_features(sample)
@@ -127,22 +155,20 @@ class NSynth(data.Dataset):
 
         # Normalize features
         data = self.data_norm.normalize(data)#.to(self.device))
-
-        # Fading Phase
-        data = self.attenuate_phase(data)
-
-        pitch = to_one_hot(128, int(pitch))#.to(self.device)
-        return data, pitch
+        return data
 
     def compute_features(self, sample):
-        spec = librosa.stft(sample, n_fft=self.n_fft, \
-                hop_length = self.hop, win_length=self.win_len)
-        
-        mag = np.log(np.abs(spec)+ 1.0e-6)[:self.n_fft//2]
-        mag = expand(mag)
         if self.mag_format == 'mel':
-            mag, _ = sign_op.specgrams_to_melspecgrams(magnitude = mag)
+            # mag, _ = sign_op.specgrams_to_melspecgrams(magnitude = mag, mel_downscale=self.n_fft//(2*self.n_mel))
+            mag = librosa.feature.melspectrogram(y=sample, sr=self.rate, n_fft=self.n_fft, hop_length=self.hop, n_mels=self.n_mel,
+                                                    fmin=self.fmin, fmax=self.fmax)
+            mag = np.log(mag + 1.0e-6)
+        else:
+            spec = librosa.stft(sample, n_fft=self.n_fft, hop_length = self.hop, 
+                win_length=self.win_len, window=self.window)
+            mag = np.log(np.abs(spec) + 1.0e-6)[:self.n_fft//2]
 
+        mag = expand(mag)
         if self.include_phase:
             angle = np.angle(spec)
             if self.phase_format == 'phase':
@@ -156,11 +182,11 @@ class NSynth(data.Dataset):
                 IF = sign_op.instantaneous_frequency(angle, time_axis=1)[:self.n_fft//2]
                 IF = expand(IF)
                 return mag, IF
-            elif self.phase_format == 'mel_if':
-                IF = sign_op.instantaneous_frequency(angle, time_axis=1)[:self.n_fft//2]
-                IF = expand(IF)
-                _, mel_if = sign_op.specgrams_to_melspecgrams(IF=IF)
-                return mag, mel_if
+            # elif self.phase_format == 'mel_if':
+                # IF = sign_op.instantaneous_frequency(angle, time_axis=1)[:self.n_fft//2]
+                # IF = expand(IF)
+                # _, mel_if = sign_op.specgrams_to_melspecgrams(IF=IF)
+                # return mag, mel_if
             else:
                 raise NotImplementedError
         return mag
@@ -206,9 +232,13 @@ class NSynth(data.Dataset):
         dip1_data, dip1_pitch = self.arrange_feature(dip1_name, dip1_row['pitch'])
         dip2_data, dip2_pitch = self.arrange_feature(dip2_name, dip2_row['pitch'])
 
-        anc_instr = torch.tensor(int(anc_row['instrument_family']))
-        dip1_instr = torch.tensor(int(dip1_row['instrument_family']))
-        dip2_instr = torch.tensor(int(dip2_row['instrument_family']))
+        # anc_instr = torch.tensor(self.instru_list.index(int(anc_row['instrument'])))
+        # dip1_instr = torch.tensor(self.instru_list.index(int(dip1_row['instrument'])))
+        # dip2_instr = torch.tensor(self.instru_list.index(int(dip2_row['instrument'])))
+
+        anc_instr = to_one_hot(self.timbre_class_size, self.instru_list.index(int(anc_row['instrument'])))
+        dip1_instr = to_one_hot(self.timbre_class_size, self.instru_list.index(int(dip1_row['instrument'])))
+        dip2_instr = to_one_hot(self.timbre_class_size, self.instru_list.index(int(dip2_row['instrument'])))
 
         return {'anc_data': anc_data, 'anc_pitch': anc_pitch, 'anc_instr': anc_instr,
                 'dip1_data': dip1_data, 'dip1_pitch': dip1_pitch, 'dip1_instr': dip1_instr,
@@ -231,8 +261,11 @@ class NSynth(data.Dataset):
         src_data, src_pitch = self.arrange_feature(src_name, src_row['pitch'])
         trg_data, trg_pitch = self.arrange_feature(trg_name, trg_row['pitch'])
 
-        src_instr = torch.tensor(int(src_row['instrument_family']))
-        trg_instr = torch.tensor(int(trg_row['instrument_family']))
+        # src_instr = torch.tensor(self.instru_list.index(int(src_row['instrument'])))
+        # trg_instr = torch.tensor(self.instru_list.index(int(trg_row['instrument'])))
+
+        src_instr = to_one_hot(self.timbre_class_size, self.instru_list.index(int(src_row['instrument'])))
+        trg_instr = to_one_hot(self.timbre_class_size, self.instru_list.index(int(trg_row['instrument'])))
 
         return {'src_data': src_data, 'src_pitch': src_pitch, 'src_instr': src_instr,
                 'trg_data': trg_data, 'trg_pitch': trg_pitch, 'trg_instr': trg_instr}
@@ -245,8 +278,11 @@ class NSynth(data.Dataset):
             dictionary
         """
         row = self.df.iloc[index]
-        name =  os.path.join(self.root, 'audio/', row['file'] + '.wav')
-        data, pitch = self.arrange_feature(name, row['pitch'])
-        instr = torch.tensor(int(row['instrument_family']))
+        folder = 'nsynth-{}'.format(row['stage'])
+        name =  os.path.join(self.root, folder, 'audio/', row['file'] + '.wav')
+        data = self.arrange_feature(name)
+        
+        pitch = to_one_hot(self.pitch_class_size, int(row['pitch']))
+        instr = to_one_hot(self.timbre_class_size, int(row['family_source_id']))
 
         return {'data': data, 'pitch': pitch, 'instr': instr}

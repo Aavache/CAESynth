@@ -125,6 +125,8 @@ class Distance(nn.Module):
             self.criterion = nn.L1Loss()
         elif mode == 'l2':
             self.criterion = nn.MSELoss()
+        elif mode == 'weighted_l2':
+            self.criterion = WeightedMSE()
         elif mode == 'cos':
             self.criterion = CosDistance()
         elif mode == 'von-mises':
@@ -134,6 +136,15 @@ class Distance(nn.Module):
 
     def forward(self, x, y):
         return self.criterion(x, y)
+
+class WeightedMSE(nn.Module):
+    def __init__(self, weight=None):
+        super(WeightedMSE, self).__init__()
+        self.weights = weight
+
+    def forward(self, x, y):
+        weights =  self.weights.repeat((x.size(0),1,1,1)) # Repeat along the batch axis
+        return torch.mean(weights*(x - y)**2)
 
 class KLN01Loss(torch.nn.Module): #Adapted from https://github.com/DmitryUlyanov/AGE
 
@@ -170,6 +181,24 @@ class KLN01Loss(torch.nn.Module): #Adapted from https://github.com/DmitryUlyanov
         if not self.minimize:
             KL *= -1
         return KL
+    
+class KLDLoss(torch.nn.Module): #Adapted from https://github.com/AntixK/PyTorch-VAE/blob/master/models/beta_vae.py
+    def __init__(self):
+        super(KLDLoss, self).__init__()
+        pass
+
+    def forward(self, mu, log_var):
+        return torch.mean(-0.5 * torch.sum(1 + log_var - mu ** 2 - log_var.exp(), dim = 1), dim = 0)
+
+class KLD2GaussianLoss(torch.nn.Module):
+    ''' KL Divergence between two diagonal Gaussians
+    '''
+    def __init__(self):
+        super(KLD2GaussianLoss, self).__init__()
+        pass
+
+    def forward(self, q_mu, q_logvar, p_mu, p_logvar):
+        return -0.5 * (1 + q_logvar - p_logvar - (torch.pow(q_mu - p_mu, 2) + torch.exp(q_logvar)) / torch.exp(p_logvar))
 
 def cal_gradient_penalty(DISC, real_data, fake_data, device, type='mixed', constant=1.0, lambda_gp=10.0):
     """Calculate the gradient penalty loss, used in WGAN-GP paper https://arxiv.org/abs/1704.00028

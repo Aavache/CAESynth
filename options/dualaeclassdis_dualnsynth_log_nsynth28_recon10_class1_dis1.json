@@ -1,0 +1,75 @@
+{
+    "experiment_name": "dualaeclassdis_dualnsynth_log_nsynth28_recon10_class1_dis1",
+    "data": {
+        "dataset": "Nsynth",
+        "data_path": "./data/nsynth",
+        "meta_file": "train_family_source.json",
+        "val_meta_file": "val_family_source.json",
+        "augmentation_enabled": false,
+        "epoch_shuffle": true,
+        "include_phase": false,
+        "in_ch": 1,
+        "pitch_range": [24,84],
+        "segment_size": 64000,
+        "pitch_size": 84,
+        "timbre_size": 28,
+        "mag_format": "log",
+        "sample_size":1,
+        "rate": 16000,
+        "n_fft": 2048,
+        "hop": 256,
+        "n_mel": 1024,
+        "fmin": 27,
+        "fmax": 11000
+    },
+    "model": {
+        "name": "dualaeclassdis",
+        "ae_net":{
+            "name": "DualNSynthAEWithPTClass",
+            "params":{
+                "in_ch": 1,
+                "pitch_class": 84,
+                "timbre_class": 28
+                }
+            },
+            "timbre_disc":{
+                "name": "Classifier",
+                "params":{
+                    "input_size": 512,
+                    "output_size": 28,
+                    "mid_size": 512
+                    }
+            },
+            "pitch_disc":{
+                "name": "Classifier",
+                "params":{
+                    "input_size": 512,
+                    "output_size": 84,
+                    "mid_size": 512
+                }
+            }
+    },
+    "train": {
+        "n_epochs": 100000,
+        "iter_per_epoch": 2000,
+        "start_epoch": 1,
+        "lr": 2.5e-5,
+        "beta1": 0.9,
+        "save_epoch_freq": 10,
+        "lambda_recon": 10.0,
+        "lambda_p_disc": 1.0,
+        "lambda_t_disc": 1.0,
+        "lambda_p_class": 1.0,
+        "lambda_t_class": 1.0,
+        "devices": [0],
+        "batch_size": 8,
+        "print_freq": 50,
+        "save_latest_freq": 250, 
+        "batch_shuffle": true,
+        "seed": 1234,
+        "n_threads": 1,
+        "recon_mode": "l2",
+        "checkpoints_dir": "checkpoints",
+        "output_dir": "test_samples"
+    }
+}

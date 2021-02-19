@@ -85,8 +85,71 @@ class GANSynthBlock(nn.Module):
     def forward(self, input):
         return self.conv(input)
 
-class GANSynthBlock_2(nn.Module):
+class NSynthBlock(nn.Module):
 
+    def __init__(self, in_ch, out_ch, k_size=(4,4), stride=(2,2), pad=(1,1), mode='enc'):
+        super(NSynthBlock, self).__init__()
+        if mode == 'enc':
+            self.conv = nn.Sequential(
+                                nn.Conv2d(in_ch, out_ch, k_size, stride, padding=pad),
+                                nn.LeakyReLU(0.2),
+                                nn.BatchNorm2d(out_ch))
+        else:
+            self.conv = nn.Sequential(
+                                nn.ConvTranspose2d(in_ch, out_ch, k_size, stride, padding=pad),
+                                nn.LeakyReLU(0.2),
+                                nn.BatchNorm2d(out_ch))
+
+    def forward(self, input):
+        return self.conv(input)
+    
+class GANSynthBlockWider(nn.Module):
+
+    def __init__(self, in_channel, out_channel, mode='enc'):
+        super(GANSynthBlockWider, self).__init__()
+        if mode == 'enc':
+            self.conv = nn.Sequential(
+                    nn.Conv2d(in_channel, out_channel, (3,9), 1, padding=((3-1)//2, (9-1)//2)),
+                    nn.Conv2d(out_channel, out_channel, (3,9), 1, padding=((3-1)//2, (9-1)//2)),
+                    nn.LeakyReLU(0.2),
+                    PixelWiseNormLayer(),
+                    nn.AvgPool2d(kernel_size=2, stride=2, ceil_mode=False, count_include_pad=False))
+        else:
+            self.conv = nn.Sequential(
+                    nn.Conv2d(in_channel, out_channel, (3,9), 1, padding=((3-1)//2,(9-1)//2)),
+                    nn.Conv2d(out_channel, out_channel, (3,9), 1, padding=((3-1)//2,(9-1)//2)),
+                    nn.LeakyReLU(0.2),
+                    PixelWiseNormLayer(),
+                    nn.Upsample(scale_factor=2, mode='nearest'))
+
+    def forward(self, input):
+        return self.conv(input)
+
+class DDGANSynthBlock(nn.Module):
+    def __init__(self, in_channel, out_channel, class_size, device, mode='enc', prob=0.2):
+        super(DDGANSynthBlock, self).__init__()
+        self.cnn_1 = DeterministicDropoutCNN(in_channel, out_channel, class_size, device, (3,3), pad=((3-1)//2,(3-1)//2), prob=prob)
+        self.cnn_2 = DeterministicDropoutCNN(out_channel, out_channel, class_size, device, (3,3), pad=((3-1)//2,(3-1)//2), prob=prob)
+        if mode == 'enc':
+            self.sampling_layer = nn.AvgPool2d(kernel_size=2, stride=2, ceil_mode=False, count_include_pad=False)
+        else:
+            self.sampling_layer = nn.Upsample(scale_factor=2, mode='nearest')
+        self.pixel_norm = PixelWiseNormLayer()
+
+    def restore_weights(self, class_id):
+        self.cnn_1.restore_weights(class_id)
+        self.cnn_2.restore_weights(class_id)
+
+    def forward(self, input, class_id):
+        h = self.cnn_1(input, class_id)
+        h = F.leaky_relu(self.cnn_2(h, class_id), 0.2)
+        h = self.pixel_norm(h)
+        out = self.sampling_layer(h)
+
+        return out
+
+class GANSynthBlock_2(nn.Module):
+    
     def __init__(self, in_channel, out_channel, mode='enc'):
         super(GANSynthBlock_2, self).__init__()
         if mode == 'enc':
@@ -108,10 +171,103 @@ class GANSynthBlock_2(nn.Module):
     def forward(self, input):
         return self.conv(input)
 
-def create_gansynth_block(in_channel, out_channel, mode='enc'):
+class DeterministicDropoutLN(nn.Module):
+    '''
+    '''
+    def __init__(self, input_size, out_size, class_size, device, prob=0.2):
+        super(DeterministicDropoutLN, self).__init__()
+        self.ln = torch.nn.Linear(input_size, out_size)
+        _dropout_masks = build_dropout_mask(class_size, input_size, prob)
+        _dropout_masks = nn.Parameter(_dropout_masks.type(torch.FloatTensor), requires_grad=False)
+        self.register_buffer('dropout_masks', _dropout_masks)
+        self.dropout_masks = self.dropout_masks.to(device)
+        self.weight_backup = self.ln.weight.clone().detach().data
+
+    def mask_weights(self, class_id):
+        '''
+        This method first backup the parameters and then mask the parameters of the linear layer
+        according to the class mask.
+        Args:
+            class_id(tensor) - identification of the class in order to get respective mask
+        '''
+        self.weight_backup = self.ln.weight.clone().detach().data
+        self.ln.weight.data = self.ln.weight * self.dropout_masks[class_id:class_id+1,:].expand(*self.ln.weight.size())
+
+    def restore_weights(self, class_id):
+        '''
+        This method merges the new updated parameters with the dropped parameters 
+        located in the backup according to its class
+        Args:
+            class_id(tensor) - identification of the class in order to get respective mask
+        '''
+        mask_condition = self.dropout_masks[class_id:class_id+1,:].expand(*self.ln.weight.size()) > 0
+        self.ln.weight.data = torch.where(mask_condition, self.ln.weight, self.weight_backup)
+
+    def forward(self, input, class_id):
+        self.mask_weights(class_id)
+        out = self.ln(input)
+        return out
+
+class DeterministicDropoutCNN(nn.Module):
+    '''
+    '''
+    def __init__(self, input_ch, out_ch, class_size, device, kr_size=(3,3), stride=(1,1), pad=(0,0) ,prob=0.2):
+        super(DeterministicDropoutCNN, self).__init__()
+        self.cnn = torch.nn.Conv2d(input_ch, out_ch, kr_size, stride, pad)
+
+        _dropout_masks = build_dropout_mask(class_size, out_ch, prob)
+        _dropout_masks = nn.Parameter(_dropout_masks.type(torch.FloatTensor), requires_grad=False)
+        self.register_buffer('dropout_masks', _dropout_masks)
+        self.dropout_masks = self.dropout_masks.to(device)
+        
+        self.weight_backup = self.cnn.weight.clone().detach().data
+
+    def mask_weights(self, class_id):
+        '''
+        This method first backup the parameters and then mask the parameters of the linear layer
+        according to the class mask.
+        Args:
+            class_id(tensor) - identification of the class in order to get respective mask
+        '''
+        self.weight_backup = self.cnn.weight.clone().detach().data
+        # TODO: Make it more readable
+        dropout_mask = self.dropout_masks[class_id,:].squeeze(0).unsqueeze(1).unsqueeze(1).unsqueeze(1).expand(*self.cnn.weight.size())
+        self.cnn.weight.data = self.cnn.weight * dropout_mask
+
+    def restore_weights(self, class_id):
+        '''
+        This method merges the new updated parameters with the dropped parameters 
+        located in the backup according to its class
+        Args:
+            class_id(tensor) - identification of the class in order to get respective mask
+        '''
+        dropout_mask = self.dropout_masks[class_id,:].squeeze(0).unsqueeze(1).unsqueeze(1).unsqueeze(1).expand(*self.cnn.weight.size())
+        mask_condition = dropout_mask > 0
+        self.cnn.weight.data = torch.where(mask_condition, self.cnn.weight, self.weight_backup)
+
+    def forward(self, input, class_id):
+        self.mask_weights(class_id)
+        out = self.cnn(input)
+        return out
+
+def build_dropout_mask(class_size, mask_size, prob):
+    '''
+    This methods builds a list of dropout masks
+    Args:
+        class_size: The number of classes or masks.
+        mask_size: The size of each mask.
+        prob: a probability of dropping [0-1]
+    Returns:
+        tensor of masks [mask_len, mask_size]
+    ''' 
+    mask = np.random.binomial(1, (1-prob), (class_size, mask_size))
+    return torch.from_numpy(mask)
+
+def create_gansynth_block(in_ch, out_ch, mode='enc'):
     block_ly = []
-    block_ly.append(nn.Conv2d(in_channel, out_channel, (3,3), 1, padding=((3-1)//2,(3-1)//2)))
-    block_ly.append(nn.Conv2d(out_channel, out_channel, (3,3), 1, padding=((3-1)//2,(3-1)//2)))
+    block_ly = []
+    block_ly.append(nn.Conv2d(in_ch, out_ch, (3,3), 1, padding=((3-1)//2,(3-1)//2)))
+    block_ly.append(nn.Conv2d(out_ch, out_ch, (3,3), 1, padding=((3-1)//2,(3-1)//2)))
     block_ly.append(nn.LeakyReLU(0.2))
     block_ly.append(PixelWiseNormLayer())
     if mode == 'enc':
@@ -132,7 +288,14 @@ def skip_connection(forward_feat, skip_feat, skip_op):
         raise NotImplementedError
 
 def down_sample2x2(tensor):
-    return F.avg_pool2d(tensor, kernel_size = (2,2), stride=(2,2))
+    if tensor.size(2)!= 1 and tensor.size(3)!= 1:
+        return F.avg_pool2d(tensor, kernel_size=(2,2), stride=(2,2))
+    elif tensor.size(2)!= 1 and tensor.size(3) == 1:
+        return F.avg_pool2d(tensor, kernel_size=(2,1), stride=(2,1))
+    elif tensor.size(2)== 1 and tensor.size(3) != 1:
+        return F.avg_pool2d(tensor, kernel_size=(1,2), stride=(1,2))
+    else:
+        return tensor
 
 def up_sample2x2(tensor):
     return F.upsample(tensor, scale_factor=2, mode='nearest')
@@ -168,7 +331,41 @@ def normalize(x, dim=1):
     '''
     zn = x.norm(2, dim=dim)
     zn = zn.unsqueeze(1)
-    return x.div(zn).expand_as(x)  
+    return x.div(zn).expand_as(x)
+
+def log_gauss(z, mu, logvar):
+    llh = - 0.5 * (torch.pow(z - mu, 2) / torch.exp(logvar) + logvar + np.log(2 * np.pi))
+    return torch.sum(llh, dim=1)    
+
+def reparameterize(mu, log_var):
+    std = torch.exp(0.5 * log_var)
+    eps = torch.randn_like(std)
+    return eps * std + mu
+
+def build_mu_emb(shape):
+    mu_emb = nn.Embedding(*shape)
+    nn.init.xavier_uniform_(mu_emb.weight)
+    mu_emb.weight.requires_grad = True
+    return mu_emb
+
+def build_logvar_emb(shape, pow_exp=0, is_trainable=False):
+    logvar_emb = nn.Embedding(*shape)
+    init_sigma = np.exp(pow_exp)
+    init_logvar = np.log(init_sigma ** 2)
+    nn.init.constant_(logvar_emb.weight, init_logvar)
+    logvar_emb.weight.requires_grad = is_trainable
+    return logvar_emb
+
+def infer_class(z, mu, logvar, n_class, device):
+    batch_size = z.shape[0]
+    log_q_y_logit = torch.zeros(batch_size, n_class).type(z.type())
+
+    for k_i in torch.arange(0, n_class).to(device):
+        mu_k, logvar_k = mu(k_i), logvar(k_i)
+        log_q_y_logit[:, k_i] = log_gauss(z, mu_k, logvar_k) + np.log(1 / n_class)
+
+    q_y = torch.nn.functional.softmax(log_q_y_logit, dim=1)
+    return log_q_y_logit, q_y
 
 def set_requires_grad(nets, requires_grad=False):
     """Set requies_grad=False for all the networks to avoid unnecessary computations

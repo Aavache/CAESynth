@@ -28,6 +28,8 @@ class Visualizer():
 
         # create a logging file to store training losses
         self.plot_data = {}
+        self.train_data = {}
+        self.val_data = {}
         self.ignore_keys = ['iters', 't_comp', 't_data'] # This keys will be ingored during plotting
         self.df_name = os.path.join(self.dir, '{}.csv'.format(opt['experiment_name'])) # Dataframe where the loss records will be saved.
         self.plot_name = os.path.join(self.dir, 'plot_{}.png'.format(opt['experiment_name']))
@@ -73,8 +75,8 @@ class Visualizer():
         self.print_current_losses(epoch, iters, losses, t_comp, t_data)
 
     def export_losses_to_csv(self):
-        """ The losses dictionary is exported with csv format
-
+        """ 
+        The losses dictionary is exported with csv format
         """
         df = pd.DataFrame(self.plot_data)
         df.to_csv(self.df_name, index= False)
@@ -104,6 +106,84 @@ class Visualizer():
                 axs[i].set_xlabel('epoch')
                 axs[i].set_ylabel('Loss')
                 i+=1
+            fig.suptitle(self.name.replace('_', ' '))
+            fig.savefig(self.plot_name)
+            plt.cla()
+            plt.close(fig)
+            
+        except Exception as e:
+            with open(self.log_name, "a") as log_file:
+                now = time.strftime("%c")
+                log_file.write('{}: Exception while ploting the loss values. {}\n'.format(now, e))
+
+    def update_loss_data(self, epoch, train_losses, val_data=None):
+        """updates the losses records with a new entry.
+
+        Parameters:
+            epoch (int) -- current epoch
+        """
+        if self.plot_data is None:
+            self.plot_data = {}
+
+        # Adding losses to the data record
+        if (len(self.plot_data.keys()) == 0):
+            self.plot_data['epoch'] = [epoch]
+        else:
+            self.plot_data['epoch'] +=  [epoch]
+
+        # Adding losses to the data record
+        for k, v in train_losses.items():
+            if (self.train_data.get(k) is None):
+                self.train_data[k] = [v]
+            else:
+                self.train_data[k] += [v]
+
+        if val_data is not None:
+            for k, v in val_data.items():
+                if (self.val_data.get(k) is None):
+                    self.val_data[k] = [v]
+                else:
+                    self.val_data[k] += [v]
+        #self.print_current_losses(epoch, iters, losses, t_comp, t_data)  
+
+    def plot_losses(self):
+        """
+        Plots the training losses and optionally validation losses
+        """
+        if not hasattr(self, 'plot_data'):
+            logging.warning('No available data to plot.')
+
+        train_data_filt = dict((k, v) for k,v in self.train_data.items() if k not in self.ignore_keys)
+        df_train = pd.DataFrame(train_data_filt)
+        if self.val_data:
+            val_data_filt = dict((k, v) for k,v in self.val_data.items() if k not in self.ignore_keys)
+            df_val = pd.DataFrame(val_data_filt)
+        try:
+            size = len(train_data_filt.keys())
+            size = len(df_train.columns)
+            col_size = math.floor(math.sqrt(size))
+            row_size = math.ceil(size / col_size)
+            fig = plt.figure(figsize=(15, 10))
+            axs = [None]*col_size*row_size
+
+            col_names = df_train.columns
+            i = 0
+            for _ in range(0, col_size):
+                for _ in range(0, row_size):
+                    if i >= len(df_train.columns):
+                        break
+                    axs[i] = fig.add_subplot(int('{}{}{}'.format(row_size, col_size, i+1)))
+                    col = col_names[i]
+                    axs[i].plot(df_train.index.values, df_train[col].values, label='training')
+                    if self.val_data:
+                        axs[i].plot(df_val.index.values, df_val[col].values, label='validation')
+                    axs[i].set_title(col)
+                    axs[i].set_xlabel('epoch')
+                    axs[i].set_ylabel('Loss')
+                    axs[i].legend()
+                    i += 1
+                    
+            fig.subplots_adjust(hspace = .7, wspace=.3)
             fig.suptitle(self.name.replace('_', ' '))
             fig.savefig(self.plot_name)
             plt.cla()
