@@ -20,7 +20,7 @@ from lib import create_model
 from lib.visualizer import Visualizer
 from lib import util
 from lib.normalizer import DataNormalizer
-from data.nsynth_loader import NSynth
+from data.dataloaders import NSynth
 
 def updated_losses(loss_accum, new_loss, iter):
     if iter == 0:
@@ -30,15 +30,7 @@ def updated_losses(loss_accum, new_loss, iter):
         return {k: loss_accum.get(k, 0) + new_loss.get(k, 0) for k in set(loss_accum) & set(new_loss)}
     #return loss_accum
 
-def main():
-    # Get the path of the option's file
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--opt_file', type=str, default='./options/example.json', help='Full path to options file') 
-    args = parser.parse_args()
-
-    # Loading the configuration file
-    opt = util.load_json(args.opt_file)
-
+def main(opt):
     # Set manual seed for reproducibility
     torch.manual_seed(opt['train']['seed'])
     np.random.seed(opt['train']['seed'])
@@ -69,7 +61,7 @@ def main():
 
     print('# Training Sample = {} | # Evaluation Sample = {}'.format(len(trainset), len(valset)))
     model = create_model(opt, is_train=True)      # create a model according to the options file
-    #model.load_networks('latest')
+    model.load_networks('latest')
 
     visualizer = Visualizer(opt)   # create a visualizer that display/save images and plots
     total_iters = 0                # the total number of training iterations
@@ -144,4 +136,12 @@ def main():
         print('End of epoch %d / %d \t Time Taken: %d sec' % (epoch, train_opt['n_epochs'], time.time() - epoch_start_time))
 
 if __name__ == '__main__':
-    main()
+    # Get the path of the option's file
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('--opt_file', type=str, default='./options/example.json', help='Full path to options file') 
+    args = parser.parse_args()
+
+    # Loading the configuration file
+    opt = util.load_json(args.opt_file)
+
+    main(opt)

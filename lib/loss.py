@@ -143,7 +143,7 @@ class WeightedMSE(nn.Module):
         self.weights = weight
 
     def forward(self, x, y):
-        weights =  self.weights.repeat((x.size(0),1,1,1)) # Repeat along the batch axis
+        weights = self.weights.repeat([x.size(0)] + [1]*len(x.size()[1:])) # Repeat along the batch axis
         return torch.mean(weights*(x - y)**2)
 
 class KLN01Loss(torch.nn.Module): #Adapted from https://github.com/DmitryUlyanov/AGE

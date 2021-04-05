@@ -2,8 +2,10 @@
 # External Libraries
 import numpy as np
 import librosa
+
 # Internal Libraries
 
+'''
 # mel spectrum constants.
 _MEL_BREAK_FREQUENCY_HERTZ = 700.0
 _MEL_HIGH_FREQUENCY_Q = 1127.0
@@ -134,7 +136,6 @@ def _mel_to_linear_matrix(mel_downscale=1):
     d = [1.0 / x if np.abs(x) > 1.0e-8 else x for x in np.sum(p, axis=0)]
     return np.matmul(m_t, np.diag(d))
 
-
 def melspecgrams_to_specgrams(logmelmag2 = None, mel_p = None, mel_downscale=1):
     """Converts melspecgrams to specgrams.
     Args:
@@ -191,7 +192,6 @@ def specgrams_to_melspecgrams(magnitude=None, IF=None, mel_downscale=1):
 
     return logmelmag, mel_p
 
-
 # *********************************************************************#
 # **************************PHASE OPERATIONS **************************#
 # *********************************************************************#
@@ -222,7 +222,6 @@ def diff(x, axis):
     d = slice_front - slice_back
     return d
 
-
 def unwrap(p, discont=np.pi, axis=-1):
     """Unwrap a cyclical phase tensor.
     Args:
@@ -252,7 +251,6 @@ def unwrap(p, discont=np.pi, axis=-1):
     unwrapped = p + ph_cumsum
     return unwrapped
 
-
 def instantaneous_frequency(phase_angle, time_axis):
     """Transform a fft tensor from phase angle to instantaneous frequency.
     Unwrap and take the finite difference of the phase. Pad with initial phase to
@@ -278,7 +276,6 @@ def instantaneous_frequency(phase_angle, time_axis):
 
     return dphase
 
-
 def polar2rect(mag, phase_angle):
     """Convert polar-form complex number to its rectangular form."""
     temp_mag = np.zeros(mag.shape,dtype=np.complex_)
@@ -293,3 +290,23 @@ def polar2rect(mag, phase_angle):
             temp_phase[i,j] = np.complex(np.cos(phase_angle[i,j]), np.sin(phase_angle[i,j]))
     
     return temp_mag * temp_phase
+'''
+
+def griffin_lim(magnitudes, stft_fn, n_iters=30):
+    """
+    PARAMS
+    ------
+    magnitudes: spectrogram magnitudes
+    stft_fn: STFT class with transform (STFT) and inverse (ISTFT) methods
+    """
+    angles = np.angle(np.exp(2j * np.pi * np.random.rand(*magnitudes.size())))
+    angles = angles.astype(np.float32)
+    angles = torch.autograd.Variable(torch.from_numpy(angles))
+    signal = stft_fn.inverse(magnitudes, angles).squeeze(1)
+
+    for i in range(n_iters):
+        _, angles = stft_fn.transform(signal)
+        signal = stft_fn.inverse(magnitudes, angles).squeeze(1)
+    return signal
+
+
