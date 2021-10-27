@@ -6,7 +6,7 @@ import torch.nn as nn
 from .base_model import BaseModel
 from . import networks, loss
 
-class MFCAESynthEnvModal(BaseModel):
+class MFCAESynthEnvModel(BaseModel):
     """
     """
     def __init__(self, opt, is_train= True):
@@ -68,8 +68,8 @@ class MFCAESynthEnvModal(BaseModel):
 
     def forward(self):
         """Run forward pass"""
-        self.recon, self.h_timbre, self.pred_timbre = self.AE(self.data, is_musical=True, pitch=self.one_hot_pitch)
-        self.fsd_recon = self.AE(self.fsd_data, is_musical=False)[0]
+        self.recon, self.h_timbre, self.pred_timbre = self.AE(self.data, pitch=self.one_hot_pitch)
+        self.fsd_recon = self.AE(self.fsd_data)[0]
         if self.lambda_p_disc != 0:        
             self.p_in_t = self.DISC_P(self.h_timbre) # Pitch classification in Timbre
 

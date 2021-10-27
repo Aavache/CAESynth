@@ -392,12 +392,12 @@ class SFCAESynth(nn.Module):
         out = self.decode(torch.cat([timbre_latent, pitch],dim=1))
         return out, timbre_latent, self.timbre_class(timbre_latent)
 
-class MFBasiline(nn.Module):
+class MFBaseline(nn.Module):
     ''' 
         Based on https://arxiv.org/pdf/1704.01279.pdf baseline which concatenates the pitch to the timbre latent code.
     '''
     def __init__(self, in_ch = 1024, pitch_class=84, timbre_class=28):
-        super(MFBasiline, self).__init__()
+        super(MFBaseline, self).__init__()
         self.enc_t = MFEncoder(in_ch, 512)
         self.dec = MFDecoder(in_ch, pitch_class + 512)
     
@@ -411,19 +411,20 @@ class MFBasiline(nn.Module):
         h_t = self.encode(input)
         return self.decode(torch.cat([h_t, pitch], dim=1)), h_t, None
 
-class SFBasiline(nn.Module):
+class SFBaseline(nn.Module):
     ''' 
         Based on https://arxiv.org/pdf/2001.11296.pdf which concatenates the pitch to the timbre latent code.
     '''
     def __init__(self, in_size = 1024, timbre_size=512, pitch_class=84, timbre_class=28, mid_size=512):
-        super(SFBasiline, self).__init__()
+        super(SFBaseline, self).__init__()
 
         self.enc_t = SFEncoder(in_size + pitch_class, mid_size, timbre_size)
         self.dec = SFDecoder(in_size, mid_size, pitch_class + timbre_size)
-    
-    def encode(self, input):
+
+    def encode(self, input, pitch):
         in_data = input.squeeze(0).squeeze(0)
         in_data = torch.transpose(in_data, 0, 1)
+        in_data = torch.cat([in_data, pitch], dim=1)
         return self.enc_t(in_data)
 
     def decode(self, latent):
@@ -431,7 +432,7 @@ class SFBasiline(nn.Module):
         return torch.transpose(out, 0, 1).unsqueeze(0).unsqueeze(0)
 
     def forward(self, input, pitch):
-        h_t = self.encode(torch.cat([input, pitch],dim=1))
+        h_t = self.encode(input, pitch)
         return self.decode(torch.cat([h_t, pitch], dim=1)), h_t, None
 
 class Classifier(nn.Module):

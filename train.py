@@ -61,7 +61,7 @@ def main(opt):
 
     print('# Training Sample = {} | # Evaluation Sample = {}'.format(len(trainset), len(valset)))
     model = create_model(opt, is_train=True)      # create a model according to the options file
-    model.load_networks('latest')
+    #model.load_networks('latest')
 
     visualizer = Visualizer(opt)   # create a visualizer that display/save images and plots
     total_iters = 0                # the total number of training iterations
