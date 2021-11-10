@@ -1,10 +1,9 @@
 # External libs
-import os
 import torch
 import torch.nn as nn
 # Internal libs
 from .base_model import BaseModel
-from . import networks, loss
+from . import networks
 
 class PitchClassModel(BaseModel):
     

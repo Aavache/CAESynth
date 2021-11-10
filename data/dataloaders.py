@@ -1,20 +1,15 @@
 # External Libraries
 import os
-import json
-import glob
 import numpy as np
 import scipy.io.wavfile
 import torch
 import torch.utils.data as data
-import torchvision.transforms as transforms
 import pandas as pd
-from sklearn.preprocessing import LabelEncoder
 import librosa
 import random
-import math
 
 # Internal Libraries
-import lib.signal_utils as sign_op
+from lib import signal_utils 
 from lib.normalizer import DataNormalizer
 
 def expand(mat, desired_size=64):
@@ -27,9 +22,100 @@ def expand(mat, desired_size=64):
 def to_one_hot(class_size, index):
     return torch.Tensor(np.eye(class_size)[index])
 
-class NSynthFSD(data.Dataset):
+class DataloaderBase(data.Dataset):
+    def __init__(self, opt, is_train):
+        # Reading arguments
+        self.is_train = is_train
+        self.shuffle = opt['epoch_shuffle']
+        self.include_phase = opt['include_phase']
+        self.segment_size = opt['segment_size']
+        self.augment_prob = opt.get('augment_prob', 0.5)
+        # self.sample_size = opt.get('sample_size', 1)
 
-    """Pytorch dataset for Nsynth and FSD Wav dataset
+        # STFT paremeters
+        self.phase_format = opt.get('phase_format', 'if')
+        self.mag_format = opt.get('mag_format', 'mel')
+        self.n_fft = opt.get('n_fft', 2048)
+        self.hop = opt.get('hop', 256)
+        self.win_len = opt.get('win_len', 2048)
+        self.window = opt.get('window', 'hann')
+        self.rate = opt.get('rate', 16000)
+        self.n_mel = opt.get('n_mel', 256)
+        self.fmin = opt.get('fmin', 27)
+        self.fmax = opt.get('fmax', 11000)
+
+    def window_sample(self, samples, start, end):
+        start = int(start * self.rate)
+        end = samples.shape[0] if end== -1 else int(end*self.rate)
+        samples = samples[start:end]
+        if samples.shape[0] > self.segment_size:
+            diff = samples.shape[0] - self.segment_size
+            idx = random.randint(0, diff)
+            samples = samples[idx:idx + self.segment_size]
+        return samples
+
+    def arrange_feature(self, path, start=0, end=1, augment_enable=False):
+        # ~7 times slower than scipy.io
+        #sample, sr = librosa.load(path, sr= self.rate, mono = True) 
+        sr, sample = scipy.io.wavfile.read(path)
+        assert sr == self.rate
+        if sample.max() > 1.5 and sample.min()<-1.5:
+            sample = sample/ np.iinfo(np.int16).max
+        sample = sample.astype(np.float)
+        sample = self.window_sample(sample, start, end)
+
+        # Data augmentation
+        if self.augment_enable:
+            sample = self.augmend_data(sample)
+
+        mag = self.compute_features(sample)
+        mag = torch.from_numpy(mag).float()
+        data = mag.unsqueeze(0)
+
+        # Normalize features
+        data = self.data_norm.normalize(data)#.to(self.device))
+        return data
+
+    def compute_features(self, sample):
+        if self.mag_format == 'mel':
+            mag = librosa.feature.melspectrogram(y=sample, sr=self.rate, n_fft=self.n_fft, hop_length=self.hop, n_mels=self.n_mel,
+                                                    fmin=self.fmin, fmax=self.fmax)
+            mag = np.log(mag + 1.0e-6)
+        else:
+            spec = librosa.stft(sample, n_fft=self.n_fft, hop_length = self.hop, 
+                    win_length=self.win_len, window=self.window)
+            mag = np.log(np.abs(spec) + 1.0e-6)[:self.n_fft//2]
+        mag = expand(mag)
+        # if self.include_phase:
+        #     angle = np.angle(spec)
+        #     if self.phase_format == 'phase':
+        #         angle = expand(angle)[:self.n_fft//2]                 
+        #         return mag, angle
+        #     elif self.phase_format == 'unwrap':
+        #         unwrapped_phase = signal_utils.unwrap(angle)
+        #         unwrapped_phase = expand(unwrapped_phase)[:self.n_fft//2]                
+        #         return mag, unwrapped_phase
+        #     elif self.phase_format == 'if':
+        #         IF = signal_utils.instantaneous_frequency(angle, time_axis=1)[:self.n_fft//2]
+        #         IF = expand(IF)
+        #         return mag, IF
+        #     else:
+        #         raise NotImplementedError
+        return mag
+
+    def augmend_data(self, samples):
+        # if np.random.uniform(0,1) > self.augment_prob:
+            # samples = signal_utils.add_noise(samples)
+        if np.random.uniform(0,1) > self.augment_prob:
+            samples = signal_utils.time_shift(samples)
+        if np.random.uniform(0,1) > self.augment_prob:
+            samples = signal_utils.pitch_shift(samples, self.rate, 10)
+        return samples
+    
+class NSynthFSD(DataloaderBase):
+
+    """Pytorch dataset for Nsynth and FSD Wav dataset. This dataloader provides with NSynth and FSD
+    pairs in every iteration.  
     args:
         root: root dir containing examples.json and audio directory with
             wav files.
@@ -37,6 +123,7 @@ class NSynthFSD(data.Dataset):
     """
 
     def __init__(self, opt, is_train=True):
+        super(NSynthFSD, self).__init__(opt,is_train)
         """Constructor"""
         # Reading arguments
         self.is_train = is_train
@@ -49,24 +136,7 @@ class NSynthFSD(data.Dataset):
         else: # Validation
             self.nsynth_meta_file = opt['nsynth_val_meta_file'] # val_family_source.json
 
-        # Loading options
-        self.shuffle = opt['epoch_shuffle']
-        self.include_phase = opt['include_phase']
-        self.segment_size = opt['segment_size']
-        self.sample_size = opt.get('sample_size', 1)
-
         # STFT paremeters
-        # if self.include_phase:
-        self.phase_format = opt.get('phase_format', 'if')
-        self.mag_format = opt.get('mag_format', 'mel')
-        self.n_fft = opt.get('n_fft', 2048)
-        self.hop = opt.get('hop', 256)
-        self.win_len = opt.get('win_len', 2048)
-        self.window = opt.get('window', 'hann')
-        self.rate = opt.get('rate', 16000)
-        self.n_mel = opt.get('n_mel', 256)
-        self.fmin = opt.get('fmin', 27)
-        self.fmax = opt.get('fmax', 11000)
         self.max_index_wav = int(0.9*self.rate)
 
         # Nysnth dataset
@@ -93,104 +163,12 @@ class NSynthFSD(data.Dataset):
         # else:
             # self.fsd_df = self.fsd_df[self.fsd_df['stage']=='test']
 
-        # Initializing Data Normalizer
+        # Initializing data normalizer
         self.data_norm = DataNormalizer(self)
       
     def __len__(self):
         return len(self.nsynth_df) # There are many more samples in NSynth than FSD.
-
-    def add_noise(self, samples):
-        return samples * np.random.uniform(0.98, 1.02, len(samples)) + np.random.uniform(-0.005, 0.005, len(samples))
-
-    def time_shift(self, samples):
-        start = int(np.random.uniform(-4800,4800))
-        if start >= 0:
-            return np.r_[samples[start:], np.random.uniform(-0.001, 0.001, start)]
-        else:
-            return np.r_[np.random.uniform(-0.001,0.001, -start), samples[:start]]
-
-    # TODO: move this methods to a utils script
-    def pitch_shift(self, samples):
-        steps = int(np.random.randint(-10, 10))
-        return librosa.effects.pitch_shift(samples, self.rate, n_steps=steps)
-
-    def augmend_data(self, samples):
-        # if np.random.uniform(0,1) > 0.5:
-            # samples = self.add_noise(samples)
-        if np.random.uniform(0,1) > 0.5:
-            samples = self.time_shift(samples)
-        if np.random.uniform(0,1) > 0.5:
-           samples = self.pitch_shift(samples)
-        return samples
-
-    def window_sample(self, samples, start, end):
-        start = int(start * self.rate)
-        end = samples.shape[0] if end==-1 else int(end*self.rate)
-        samples = samples[start:end]
-        if samples.shape[0] > self.segment_size:
-            diff = samples.shape[0] - self.segment_size
-            idx = random.randint(0, diff)
-            samples = samples[idx:idx + self.segment_size]
-        return samples
-    
-    def arrange_feature(self, path, start=0, end=-1, augment_enable=False):
-        # ~7 times slower than scipy however is required to downsample the sampling rate
-        # sample, sr = librosa.load(path, sr=self.rate, mono = True)
-        sr, sample = scipy.io.wavfile.read(path)
-        assert sr == self.rate
-        if sample.max() > 1.5 and sample.min()<-1.5:
-            sample = sample/ np.iinfo(np.int16).max
-
-        sample = sample.astype(np.float)
-        sample = self.window_sample(sample, start, end)
-
-        # Data augmentation
-        if augment_enable:
-            sample = self.augmend_data(sample)
-
-        if self.include_phase:
-            mag, phase = self.compute_features(sample)
-            mag = torch.from_numpy(mag).float()
-            mag = mag.unsqueeze(0)
-            phase = torch.from_numpy(phase).float()
-            phase = phase.unsqueeze(0)
-            data = torch.cat([mag, phase], dim = 0)
-        else:
-            mag = self.compute_features(sample)
-            mag = torch.from_numpy(mag).float()
-            data = mag.unsqueeze(0)
-
-        # Normalize features
-        data = self.data_norm.normalize(data)#.to(self.device))
-
-        return data
-
-    def compute_features(self, sample):
-        spec = librosa.stft(sample, n_fft=self.n_fft, hop_length = self.hop, 
-            win_length=self.win_len, window=self.window)
-        mag = np.log(np.abs(spec) + 1.0e-6)[:self.n_fft//2]
-        mag = expand(mag)
-        if self.mag_format == 'mel':
-            mag, _ = sign_op.specgrams_to_melspecgrams(magnitude = mag, mel_downscale=self.n_fft//(2*self.n_mel))
-            #mag = librosa.feature.melspectrogram(S=mag**2, sr=self.rate, n_fft=self.n_fft, 
-
-        # if self.include_phase:
-        #     angle = np.angle(spec)
-        #     if self.phase_format == 'phase':
-        #         angle = expand(angle)[:self.n_fft//2]                 
-        #         return mag, angle
-        #     elif self.phase_format == 'unwrap':
-        #         unwrapped_phase = sign_op.unwrap(angle)
-        #         unwrapped_phase = expand(unwrapped_phase)[:self.n_fft//2]                
-        #         return mag, unwrapped_phase
-        #     elif self.phase_format == 'if':
-        #         IF = sign_op.instantaneous_frequency(angle, time_axis=1)[:self.n_fft//2]
-        #         IF = expand(IF)
-        #         return mag, IF
-        #     else:
-        #         raise NotImplementedError
-        return mag
-    
+        
     def __getitem__(self, nsynth_index):
         """
         Args:
@@ -204,8 +182,8 @@ class NSynthFSD(data.Dataset):
         
         # Nsynth sample
         nsynth_row = self.nsynth_df.iloc[nsynth_index]
-        folder = 'nsynth-{}'.format(nsynth_row['stage'])
-        name =  os.path.join(self.root,self.nsynth_folder, folder, 'audio/', nsynth_row['file'] + '.wav')
+        stage_folder = 'nsynth-{}'.format(nsynth_row['stage'])
+        name =  os.path.join(self.root, self.nsynth_folder, stage_folder, 'audio/', nsynth_row['file'] + '.wav')
         nsynth_data = self.arrange_feature(name, start=0, end=1, augment_enable=False)
         pitch = to_one_hot(self.pitch_class_size, int(nsynth_row['pitch']))
         instr = to_one_hot(self.timbre_class_size, int(nsynth_row['family_source_id']))
@@ -214,10 +192,10 @@ class NSynthFSD(data.Dataset):
         fsd_index =  nsynth_index % len(self.fsd_df)
         fsd_row = self.fsd_df.iloc[fsd_index]
 
-        folder = fsd_row['stage']
+        stage_folder = fsd_row['stage']
         start = fsd_row['start']
         end = fsd_row['end']
-        name =  os.path.join(self.root, self.fsd_folder, folder, str(fsd_row['fname']) + '.wav')
+        name =  os.path.join(self.root, self.fsd_folder, stage_folder, str(fsd_row['fname']) + '.wav')
 
         fsd_data = self.arrange_feature(name, start=start, end=end, augment_enable=True)
         fsd_instr_idx = self.fsd_classes.index(fsd_row['labels'])
@@ -227,7 +205,7 @@ class NSynthFSD(data.Dataset):
         return {'nsynth_data': nsynth_data, 'nsynth_pitch': pitch, 'nsynth_instr': instr, 
                 'fsd_data': fsd_data, 'fsd_pitch':fsd_pitch, 'fsd_instr':fsd_instr}
 
-class NSynth(data.Dataset):
+class NSynth(DataloaderBase):
 
     """Pytorch dataset for NSynth wav dataset
     args:
@@ -237,37 +215,21 @@ class NSynth(data.Dataset):
     """
 
     def __init__(self, opt, is_train=True):
+        super(NSynth, self).__init__(opt,is_train)
         """Constructor"""
-        # Reading arguments
-        self.is_train = is_train
 
         # Loading options
-        self.shuffle = opt['epoch_shuffle']
         self.root = opt['data_path']
         if is_train:
             self.meta_file = opt['meta_file']
         else: # Validation
             self.meta_file = opt['val_meta_file']
-        self.include_phase = opt['include_phase']
-        self.segment_size = opt['segment_size']
-        self.sample_size = opt.get('sample_size', 2)
-        self.mag_format = opt.get('mag_format', 'mel')
-        self.phase_format = opt.get('phase_format', 'if')
-        self.augmentation_enabled = opt.get('augmentation_enabled', True)
 
         # STFT paremeters
-        self.n_fft = opt.get('n_fft', 2048)
-        self.hop = opt.get('hop', 256)
-        self.win_len = opt.get('win_len', 2048)
-        self.window = opt.get('window', 'hann')
-        self.rate = opt.get('rate', 16000)
-        self.n_mel = opt.get('n_mel', 256)
-        self.fmin = opt.get('fmin', 27)
-        self.fmax = opt.get('fmax', 11000)
         self.max_index_wav = int(self.rate)
 
-        self.mel_filter = librosa.filters.mel(sr=self.rate, n_fft=self.n_fft, 
-                                       n_mels=self.n_mel, fmin=self.fmin, fmax=self.fmax)
+        #self.mel_filter = librosa.filters.mel(sr=self.rate, n_fft=self.n_fft, 
+        #                               n_mels=self.n_mel, fmin=self.fmin, fmax=self.fmax)
 
         self.df = pd.read_json(os.path.join(os.path.join(self.root, self.meta_file)), orient='index')
         self.df['file'] = self.df.index
@@ -287,101 +249,6 @@ class NSynth(data.Dataset):
     def __len__(self):
         return len(self.df)
 
-    def add_noise(self, samples):
-        return samples * np.random.uniform(0.98, 1.02, len(samples)) + np.random.uniform(-0.005, 0.005, len(samples))
-
-    def time_shift(self, samples):
-        start = int(np.random.uniform(-4800,4800))
-        if start >= 0:
-            return np.r_[samples[start:], np.random.uniform(-0.001, 0.001, start)]
-        else:
-            return np.r_[np.random.uniform(-0.001,0.001, -start), samples[:start]]
-    
-    def augmend_data(self, samples):
-        # if np.random.uniform(0,1) > 0.5:
-            # samples = self.add_noise(samples)
-        # if np.random.uniform(0,1) > 0.5:
-            # samples = self.time_shift(samples)s
-        # if np.random.uniform(0,1) > 0.5:
-            # samples = self.pitch_shift(samples)
-        return samples
-
-    # def window_sample(self, samples):
-    #     if self.max_index_wav < samples.shape[0]:
-    #         samples = samples[:self.max_index_wav]
-    #     if samples.shape[0] > self.segment_size:
-    #         diff = samples.shape[0] - self.segment_size
-    #         idx = random.randint(0, diff)
-    #         samples = samples[idx:idx + self.segment_size]
-    #     return samples
-
-    def window_sample(self, samples, start, end):
-        start = int(start * self.rate)
-        end = samples.shape[0] if end==-1 else int(end*self.rate)
-        samples = samples[start:end]
-        if samples.shape[0] > self.segment_size:
-            diff = samples.shape[0] - self.segment_size
-            idx = random.randint(0, diff)
-            samples = samples[idx:idx + self.segment_size]
-        return samples
-    
-    def arrange_feature(self, path, start=0, end=1):
-        # ~7 times slower than scipy.io
-        #sample, sr = librosa.load(path, sr= self.rate, mono = True) 
-        sr, sample = scipy.io.wavfile.read(path)
-        assert sr == self.rate
-        sample = sample/ np.iinfo(np.int16).max
-        sample = sample.astype(np.float)
-        sample = self.window_sample(sample, start, end)
-
-        # Data augmentation
-        if self.augmentation_enabled:
-            sample = self.augmend_data(sample)
-
-        if self.include_phase:
-            mag, phase = self.compute_features(sample)
-            mag = torch.from_numpy(mag).float()
-            mag = mag.unsqueeze(0)
-            phase = torch.from_numpy(phase).float()
-            phase = phase.unsqueeze(0)
-            data = torch.cat([mag, phase], dim = 0)
-        else:
-            mag = self.compute_features(sample)
-            mag = torch.from_numpy(mag).float()
-            data = mag.unsqueeze(0)
-
-        # Normalize features
-        data = self.data_norm.normalize(data)#.to(self.device))
-        return data
-
-    def compute_features(self, sample):
-        if self.mag_format == 'mel':
-            mag = librosa.feature.melspectrogram(y=sample, sr=self.rate, n_fft=self.n_fft, hop_length=self.hop, n_mels=self.n_mel,
-                                                    fmin=self.fmin, fmax=self.fmax)
-            mag = np.log(mag + 1.0e-6)
-        else:
-            spec = librosa.stft(sample, n_fft=self.n_fft, hop_length = self.hop, 
-                win_length=self.win_len, window=self.window)
-            mag = np.log(np.abs(spec) + 1.0e-6)[:self.n_fft//2]
-
-        mag = expand(mag)
-        # if self.include_phase:
-        #     angle = np.angle(spec)
-        #     if self.phase_format == 'phase':
-        #         angle = expand(angle)[:self.n_fft//2]                 
-        #         return mag, angle
-        #     elif self.phase_format == 'unwrap':
-        #         unwrapped_phase = sign_op.unwrap(angle)
-        #         unwrapped_phase = expand(unwrapped_phase)[:self.n_fft//2]                
-        #         return mag, unwrapped_phase
-        #     elif self.phase_format == 'if':
-        #         IF = sign_op.instantaneous_frequency(angle, time_axis=1)[:self.n_fft//2]
-        #         IF = expand(IF)
-        #         return mag, IF
-        #     else:
-        #         raise NotImplementedError
-        return mag
-    
     def __getitem__(self, index):
         """
         Args:
@@ -395,7 +262,7 @@ class NSynth(data.Dataset):
         row = self.df.iloc[index]
         folder = 'nsynth-{}'.format(row['stage'])
         name =  os.path.join(self.root, folder, 'audio/', row['file'] + '.wav')
-        data = self.arrange_feature(name)
+        data = self.arrange_feature(name, augment_enable=False)
         
         pitch = to_one_hot(self.pitch_class_size, int(row['pitch']))
         instr = to_one_hot(self.timbre_class_size, int(row['family_source_id']))

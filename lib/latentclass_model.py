@@ -9,7 +9,7 @@ from . import networks, loss
 class LatentClassModel(BaseModel):
     
     def __init__(self, opt, is_train= True):
-        """Initialize a latent classifier to evaluate the disentanglement
+        """ Initialize a latent classifier to evaluate the disentanglement
 
         Parameters:
             opt (dict)      - stores all the experiment flags; needs to be a subclass of BaseOptions

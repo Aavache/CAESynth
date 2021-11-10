@@ -1,11 +1,9 @@
-# This code implementation was mainly taken from: https://github.com/ss12f32v/GANsynth-pytorch
+# This code implementation was mainly based on: https://github.com/ss12f32v/GANsynth-pytorch
 # External Libraries
 import numpy as np
 import librosa
-
 # Internal Libraries
 
-'''
 # mel spectrum constants.
 _MEL_BREAK_FREQUENCY_HERTZ = 700.0
 _MEL_HIGH_FREQUENCY_Q = 1127.0
@@ -290,7 +288,10 @@ def polar2rect(mag, phase_angle):
             temp_phase[i,j] = np.complex(np.cos(phase_angle[i,j]), np.sin(phase_angle[i,j]))
     
     return temp_mag * temp_phase
-'''
+
+# *********************************************************************#
+# ************************** Griffin-Lim  *****************************#
+# *********************************************************************#
 
 def griffin_lim(magnitudes, stft_fn, n_iters=30):
     """
@@ -309,4 +310,20 @@ def griffin_lim(magnitudes, stft_fn, n_iters=30):
         signal = stft_fn.inverse(magnitudes, angles).squeeze(1)
     return signal
 
+# *********************************************************************#
+# ************************** Data Augmentation ************************#
+# *********************************************************************#
 
+def add_noise(samples):
+    return samples * np.random.uniform(0.98, 1.02, len(samples)) + np.random.uniform(-0.005, 0.005, len(samples))
+
+def time_shift(samples):
+    start = int(np.random.uniform(-4800, 4800))
+    if start >= 0:
+        return np.r_[samples[start:], np.random.uniform(-0.001, 0.001, start)]
+    else:
+        return np.r_[np.random.uniform(-0.001, 0.001, -start), samples[:start]]
+
+def pitch_shift(samples, rate, step_range):
+    steps = int(np.random.randint(-step_range, step_range))
+    return librosa.effects.pitch_shift(samples, rate, n_steps=steps)

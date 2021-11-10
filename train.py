@@ -1,14 +1,9 @@
 """ 
-TRAINING Script Timbre Pitch Disentanglement
-"""
+TRAINING Script for CAESynth: Real-time timbre interpolation and pitch control. """
 # External libs
 import argparse
 import numpy as np
 import time
-import logging
-import os
-import json
-import sys
 import torch
 import copy
 from tqdm import tqdm
@@ -17,10 +12,9 @@ warnings.filterwarnings("ignore")
 
 # Internal libs
 from lib import create_model
+from data import create_dataset
 from lib.visualizer import Visualizer
 from lib import util
-from lib.normalizer import DataNormalizer
-from data.dataloaders import NSynth
 
 def updated_losses(loss_accum, new_loss, iter):
     if iter == 0:
@@ -44,7 +38,8 @@ def main(opt):
         torch.cuda.set_device(gpu_ids[0])
     
     # Training set
-    trainset = NSynth(opt['data'])  # create a dataset according to the options file
+    trainset = create_dataset(opt['data'], is_train=True)
+    # trainset = NSynth(opt['data'])  # create a dataset according to the options file
     train_dataloader = torch.utils.data.DataLoader(
                                     trainset,
                                     batch_size=opt['train']['batch_size'],
@@ -52,14 +47,15 @@ def main(opt):
                                     num_workers=int(opt['train']['n_threads']))
 
     # Validation set
-    valset = NSynth(opt['data'], is_train=False)  # create a dataset according to the options file
-    val_dataloader = torch.utils.data.DataLoader(
-                                    valset,
+    validset = create_dataset(opt['data'], is_train=False)
+    # validset = NSynth(opt['data'], is_train=False)  # create a dataset according to the options file
+    valid_dataloader = torch.utils.data.DataLoader(
+                                    validset,
                                     batch_size=1,
                                     shuffle=not opt['train']['batch_shuffle'],
                                     num_workers=int(opt['train']['n_threads']))
 
-    print('# Training Sample = {} | # Evaluation Sample = {}'.format(len(trainset), len(valset)))
+    # print('# Training Sample = {} | # Evaluation Sample = {}'.format(len(trainset), len(validset)))
     model = create_model(opt, is_train=True)      # create a model according to the options file
     #model.load_networks('latest')
 
@@ -108,7 +104,7 @@ def main(opt):
         val_iter = 0
         val_loss_accum = {}
         model.eval()
-        val_prg = tqdm(val_dataloader, desc='Bar desc')
+        val_prg = tqdm(valid_dataloader, desc='Bar desc')
         for data in val_prg:
             model.set_input(data)
             model.validate(data)
