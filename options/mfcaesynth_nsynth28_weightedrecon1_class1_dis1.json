@@ -1,5 +1,5 @@
 {
-    "experiment_name": "mfcaesynth2_nsynth28_weightedrecon1_class1_dis1",
+    "experiment_name": "mfcaesynth_nsynth28_weightedrecon1_class1_dis1",
     "data": {
         "dataset": "Nsynth",
         "data_path": "./data/nsynth",
@@ -25,7 +25,7 @@
     "model": {
         "name": "mfcaesynth",
         "ae_net":{
-            "name": "MFCAESynth2",
+            "name": "MFCAESynth",
             "params":{
                 "in_ch": 1,
                 "pitch_class": 84,

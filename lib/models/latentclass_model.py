@@ -3,21 +3,22 @@ import os
 import torch
 import torch.nn as nn
 # Internal libs
-from .base_model import BaseModel
-from . import networks, loss
+from lib.models.base_model import BaseModel
+from lib import networks
 
 class LatentClassModel(BaseModel):
-    
     def __init__(self, opt, is_train= True):
-        """ Initialize a latent classifier to evaluate the disentanglement
+        """ Initialize a latent classifier to evaluate latent pitch classification (LPA) of the pretrained model.
+        This model can be reused to either train a latent timbre classifier or a latent pitch classifier. In addition
+        it is designed to operate in both single and multi frame, to be specified in the config file.
 
         Parameters:
-            opt (dict)      - stores all the experiment flags; needs to be a subclass of BaseOptions
+            opt (dict)      - stores all the experiment configuration
             is_train (bool) - Stage flag; {True: Training, False: Testing}
         """
         BaseModel.__init__(self, opt, is_train= True)
 
-        # Instantiating networks
+        # Instantiating networks and loading the pretrained model
         self.AE = networks.instantiate_net(opt['model']['class'])
         self.AE.to(self.device)
         load_filename = '%s_%s.pth' % ('latest', 'AE')
@@ -25,17 +26,16 @@ class LatentClassModel(BaseModel):
         state_dict = torch.load(load_path, map_location=str(self.device))
         self.AE.load_state_dict(state_dict)
 
+        # Instantiating the evaluation networks 
         self.classifier = networks.instantiate_net(opt['model']['class'])
         self.classifier.to(self.device)
         self.model_names = ['classifier']
         self.label = opt['label']
         self.mode = opt['mode']
 
-        if is_train:  # define discriminators
+        if is_train:
             # Specify the training losses you want to print out.
             self.loss_names = ['class']
-
-            # This network discriminates Pitch in the Timbre embedding.
             self.criterion_entropy = nn.CrossEntropyLoss()
 
             self.optimizer = torch.optim.Adam(self.classifier.parameters(), lr=opt['train']['lr'], betas=(opt['train']['beta1'], 0.999))
@@ -59,13 +59,12 @@ class LatentClassModel(BaseModel):
 
     def forward(self):
         """Run forward pass"""
-        h = self.AE.encode(self.data, self.one_hot_pitch)
-        #h = self.AE.encode(self.data)
-        if len(h.size())>2:
-            h = h.squeeze(-1).squeeze(-1)
-        self.pred = self.classifier(h) # Pitch classification in Timbre
+        z_t = self.AE.encode(self.data, self.one_hot_pitch)
+        if len(z_t.size())>2:
+            z_t = z_t.squeeze(-1).squeeze(-1)
+        self.pred = self.classifier(z_t) # Pitch classification in the timbre code
 
-    def validate(self, data):
+    def validate(self):
         with torch.no_grad():
             self.forward()
             self.compute_losses()
@@ -83,7 +82,6 @@ class LatentClassModel(BaseModel):
 
     def optimize_parameters(self):
         """Calculate losses, gradients, and update network weights; called in every training iteration"""
-        # forward
         self.forward()
 
         self.optimizer.zero_grad() 

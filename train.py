@@ -1,5 +1,5 @@
 """ 
-TRAINING Script for CAESynth: Real-time timbre interpolation and pitch control. """
+TRAINING Script for CAESynth: Real-time timbre interpolation and pitch control."""
 # External libs
 import argparse
 import numpy as np
@@ -11,7 +11,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 # Internal libs
-from lib import create_model
+from lib.models import create_model
 from data import create_dataset
 from lib.visualizer import Visualizer
 from lib import util
@@ -107,7 +107,7 @@ def main(opt):
         val_prg = tqdm(valid_dataloader, desc='Bar desc')
         for data in val_prg:
             model.set_input(data)
-            model.validate(data)
+            model.validate()
 
             losses = model.get_current_losses()
 

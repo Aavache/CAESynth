@@ -2,16 +2,16 @@
 import torch
 import torch.nn as nn
 # Internal libs
-from .base_model import BaseModel
-from . import networks
+from lib.models.base_model import BaseModel
+from lib import networks
 
 class PitchClassModel(BaseModel):
     
     def __init__(self, opt, is_train= True):
-        """Initialize a Pitch classifier to evaluate pitch control
+        """A pitch classifier model.
 
         Parameters:
-            opt (dict)      - stores all the experiment flags; needs to be a subclass of BaseOptions
+            opt (dict)      - stores all the experiment configuration
             is_train (bool) - Stage flag; {True: Training, False: Testing}
         """
         BaseModel.__init__(self, opt, is_train= True)
@@ -24,8 +24,6 @@ class PitchClassModel(BaseModel):
         if is_train:  # define discriminators
             # Specify the training losses you want to print out.
             self.loss_names = ['class']
-
-            # This network discriminates Pitch in the Timbre embedding.
             self.criterion_entropy = nn.CrossEntropyLoss()
 
             self.optimizer = torch.optim.Adam(self.classifier.parameters(), lr=opt['train']['lr'], betas=(opt['train']['beta1'], 0.999))
@@ -42,7 +40,7 @@ class PitchClassModel(BaseModel):
         """Run forward pass"""
         self.pred = self.classifier(self.data).squeeze(-1).squeeze(-1)
 
-    def validate(self, data):
+    def validate(self):
         with torch.no_grad():
             self.forward()
             self.compute_losses()

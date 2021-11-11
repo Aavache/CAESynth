@@ -4,13 +4,15 @@ import numpy as np
 import torch 
 
 class DataNormalizer(object):
+    '''
+    Data normalization class, before jumping on the implementation, you may have to compute the dataset statistics to 
+    perform the normalization 
+    '''
     def __init__(self, dataloader):
         self.dataloader = dataloader
         print('WARNING. Normalization parameters are hardcoded!')
-        # When wav is normalized [-1,1]
         self.s_a = 0.0612 
         self.s_b = 0.0449
-        #     raise NotImplementedError
         if self.dataloader.mag_format == 'log':
             self.s_a = 0.0795
             self.s_b = 0.2990
@@ -18,10 +20,8 @@ class DataNormalizer(object):
             # 16kH 256 mels librosa
             self.s_a = 0.0665
             self.s_b = 0.1189
-
         else:
             raise NotImplementedError
-
         # self._range_normalizer(magnitude_margin=0.8)
         print("s_a:", self.s_a)
         print("s_b:", self.s_b)
@@ -29,9 +29,8 @@ class DataNormalizer(object):
     def _range_normalizer(self, magnitude_margin):
         min_spec = 10000
         max_spec = -10000
-
+        # Finding the min and max values in the trainset
         for batch_idx, data in enumerate(self.dataloader):
-            # training mel
             spec = data['data'][0,:,:]
             if spec.min() < min_spec: min_spec=spec.min()
             if spec.max() > max_spec: max_spec=spec.max()
