@@ -29,7 +29,6 @@ class DataloaderBase(data.Dataset):
         self.include_phase = opt['include_phase']
         self.segment_size = opt['segment_size']
         self.augment_prob = opt.get('augment_prob', 0.5)
-        # self.sample_size = opt.get('sample_size', 1)
 
         # STFT paremeters
         self.phase_format = opt.get('phase_format', 'if')
@@ -64,7 +63,7 @@ class DataloaderBase(data.Dataset):
         sample = self.window_sample(sample, start, end)
 
         # Data augmentation
-        if self.augment_enable:
+        if augment_enable:
             sample = self.augmend_data(sample)
 
         mag = self.compute_features(sample)
@@ -72,7 +71,7 @@ class DataloaderBase(data.Dataset):
         data = mag.unsqueeze(0)
 
         # Normalize features
-        data = self.data_norm.normalize(data)#.to(self.device))
+        data = self.data_norm.normalize(data)
         return data
 
     def compute_features(self, sample):

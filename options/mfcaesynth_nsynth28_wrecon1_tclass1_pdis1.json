@@ -51,7 +51,7 @@
         "lambda_recon": 1.0,
         "lambda_p_disc": 1.0,
         "lambda_t_class": 1.0,
-        "devices": [0],
+        "device": 0,
         "batch_size": 8,
         "print_freq": 50,
         "save_latest_freq": 250, 

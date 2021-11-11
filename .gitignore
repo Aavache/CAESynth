@@ -1,8 +1,11 @@
 data/nsynth/
 data/fsd50k/
 checkpoints
+samples/
+midi/
 .vscode
 data/__pycache__
 lib/__pycache__
+lib/models/__pycache__
 .ipynb_checkpoints
 deprecated/

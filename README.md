@@ -1,9 +1,6 @@
 # CAESynth: Real-Time Timbre Intepolation and Pitch Control with Conditional Autoencoders
 
-This is the original python implementation of the CAESynth paper, presented at the IEEE International Workshop on Machine Learning for Signal Processing MLSP 2021. please cite our work!. 
-
-```
-```
+This is the original python implementation of the CAESynth paper, presented at the IEEE International Workshop on Machine Learning for Signal Processing MLSP 2021. Please cite our work!. 
 
 ## Dependencies
 
@@ -24,4 +21,5 @@ python train.py --opt_file "./options/config_file_name.json"
 ```
 
 ## Inference
-We develop the inference code examples in jupyter notebook so that it is more interactive and intuitive. Synthesized exampled can be found in the `./samples/` directory.
+[comment]: <> (We develop the inference code examples in jupyter notebook so that it is more interactive and intuitive. Synthesized exampled can be found in the `./samples/` directory.)
+An inference jupyter notebook and synthesized samples will be released soon.

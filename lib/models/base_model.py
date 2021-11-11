@@ -20,9 +20,9 @@ class BaseModel(ABC):
         """
         self.opt = opt 
         self.phase = 'train' if is_train else 'test'
-        self.gpu_ids = opt[self.phase]['devices']
+        self.gpu_id = opt[self.phase]['device']
         # get device name: CPU or GPU
-        self.device = torch.device('cuda:{}'.format(self.gpu_ids[0])) if self.gpu_ids else torch.device('cpu')  
+        self.device = torch.device('cuda:{}'.format(self.gpu_id)) if self.gpu_id >= 0 else torch.device('cpu')  
         if is_train:
              # save checkpoints in save_dir
             self.save_dir = os.path.join(opt[self.phase]['checkpoints_dir'], opt['experiment_name'], 'snap') 

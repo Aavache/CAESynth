@@ -7,13 +7,13 @@ import importlib
 from lib.models.base_model import BaseModel
 
 def find_model_using_name(model_name):
-    """Import the module "lib/[model_name]_model.py".
+    """Import the module "lib/models/[model_name]_model.py".
 
     In the file, the class called [model_name]Model() will
     be instantiated. It has to be a subclass of BaseModel,
     and it is case-insensitive.
     """
-    model_filename = "lib." + model_name + "_model"
+    model_filename = "lib.models." + model_name + "_model"
     modellib = importlib.import_module(model_filename)
     model = None
     target_model_name = model_name.replace('_', '') + 'model'
@@ -23,7 +23,9 @@ def find_model_using_name(model_name):
             model = cls
 
     if model is None:
-        print("In %s.py, there should be a subclass of BaseModel with class name that matches %s in lowercase." % (model_filename, target_model_name))
+        print("In %s.py, there should be a subclass of BaseModel \
+                with class name that matches %s in lowercase." % (model_filename,\
+                                                             target_model_name))
         exit(0)
 
     return model

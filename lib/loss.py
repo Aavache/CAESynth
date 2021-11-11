@@ -210,7 +210,7 @@ def cal_gradient_penalty(DISC, real_data, fake_data, device, type='mixed', const
         netD (network)              -- discriminator network
         real_data (tensor array)    -- real images
         fake_data (tensor array)    -- generated images from the generator
-        device (str)                -- GPU / CPU: from torch.device('cuda:{}'.format(self.gpu_ids[0])) if self.gpu_ids else torch.device('cpu')
+        device (str)                -- GPU / CPU
         type (str)                  -- if we mix real and fake data or not [real | fake | mixed].
         constant (float)            -- the constant used in formula ( | |gradient||_2 - constant)^2
         lambda_gp (float)           -- weight for this loss

@@ -30,10 +30,10 @@ def main(opt):
 
     train_opt = opt['train']
     
-    gpu_ids = opt['train']['devices']
+    gpu_id = opt['train']['device']
     # Set cuda if available
-    if len(gpu_ids) > 0:
-        torch.cuda.set_device(gpu_ids[0])
+    if gpu_id > 0:
+        torch.cuda.set_device(gpu_id)
     
     # Training set
     trainset = create_dataset(opt['data'], is_train=True)
