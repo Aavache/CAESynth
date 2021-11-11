@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 # internal libs
-from . import util
+from lib import util
 
 class TripletLoss(torch.nn.Module):
     def __init__(self, loss_type='l1', alpha = 0.2, hinge=True):

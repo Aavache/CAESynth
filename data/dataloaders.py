@@ -13,7 +13,6 @@ from lib import signal_utils
 from lib.normalizer import DataNormalizer
 
 def expand(mat, desired_size=64):
-    # while not math.log(mat.shape[1], 2).is_integer():
     while mat.shape[1] < desired_size:
         expand_vec = np.expand_dims(mat[:,-1],axis=1)
         mat = np.hstack((mat,expand_vec))
@@ -86,6 +85,7 @@ class DataloaderBase(data.Dataset):
                     win_length=self.win_len, window=self.window)
             mag = np.log(np.abs(spec) + 1.0e-6)[:self.n_fft//2]
         mag = expand(mag)
+        # # Similarly to GANSynth, including the phase information could be interesting 
         # if self.include_phase:
         #     angle = np.angle(spec)
         #     if self.phase_format == 'phase':

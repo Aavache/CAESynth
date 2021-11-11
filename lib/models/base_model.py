@@ -4,26 +4,28 @@ import torch
 from collections import OrderedDict
 from abc import ABC, abstractmethod
 # Internal libs
-from . import util
+from lib import util
 
 class BaseModel(ABC):
     """
-    This abstract class serves as a template class for other child implemenations. 
+    This abstract class serves as a template class for custom model implemenations. 
     """
 
     def __init__(self, opt, is_train= True):
         """ Initialize the Base Model class.
 
         Parameters:
-            opt (dict)      - stores all the experiment flags; needs to be a subclass of BaseOptions
-            is_train (bool) - Stage flag; {True: Training, False: Testing}       
+            opt (dict)      - stores all the experiment configuration
+            is_train (bool) - Stage flag; {True: Training, False: Testing}   
         """
         self.opt = opt 
         self.phase = 'train' if is_train else 'test'
         self.gpu_ids = opt[self.phase]['devices']
-        self.device = torch.device('cuda:{}'.format(self.gpu_ids[0])) if self.gpu_ids else torch.device('cpu')  # get device name: CPU or GPU
+        # get device name: CPU or GPU
+        self.device = torch.device('cuda:{}'.format(self.gpu_ids[0])) if self.gpu_ids else torch.device('cpu')  
         if is_train:
-            self.save_dir = os.path.join(opt[self.phase]['checkpoints_dir'], opt['experiment_name'], 'snap')  # save all the checkpoints to save_dir
+             # save checkpoints in save_dir
+            self.save_dir = os.path.join(opt[self.phase]['checkpoints_dir'], opt['experiment_name'], 'snap') 
             util.mkdir(self.save_dir)
 
         self.loss_names = []
@@ -103,14 +105,14 @@ class BaseModel(ABC):
                 net.load_state_dict(state_dict)
 
     def eval(self):
-        """Make models eval mode during test time"""
+        """Switch model to eval mode"""
         for name in self.model_names:
             if isinstance(name, str):
                 net = getattr(self, name)
                 net.eval()
 
     def train(self):
-        """Make models eval mode during test time"""
+        """Switch model to train mode"""
         for name in self.model_names:
             if isinstance(name, str):
                 net = getattr(self, name)

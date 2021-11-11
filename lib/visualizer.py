@@ -1,8 +1,6 @@
 # External libs
 import os
-import sys
 import math
-import numpy as np
 import pandas as pd
 import time
 import logging

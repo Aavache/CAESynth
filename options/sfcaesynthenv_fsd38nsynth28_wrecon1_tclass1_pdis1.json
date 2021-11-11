@@ -1,16 +1,18 @@
 {
-    "experiment_name": "mfcaesynth_nsynth28_weightedrecon1_class1_dis1",
+    "experiment_name": "sfcaesynthenv_fsd38nsynth28_wrecon1_tclass1_pdis1",
     "data": {
-        "dataset": "Nsynth",
-        "data_path": "./data/nsynth",
-        "meta_file": "train_family_source.json",
-        "val_meta_file": "val_family_source.json",
-        "augmentation_enabled": false,
+        "dataset": "nsynthfsd",
+        "data_path": "./data/",
+        "nsynth_folder": "nsynth",
+        "nsynth_meta_file": "train_family_source.json",
+        "nsynth_val_meta_file": "val_family_source.json",
+        "fsd_folder": "fsd50k",
+        "fsd_meta_file": "fsd_labels38_sample48.csv",
         "epoch_shuffle": true,
         "include_phase": false,
         "in_ch": 1,
         "pitch_range": [24,84],
-        "segment_size": 64000,
+        "segment_size": 16000,
         "pitch_size": 84,
         "timbre_size": 28,
         "mag_format": "log",
@@ -18,24 +20,26 @@
         "rate": 16000,
         "n_fft": 2048,
         "hop": 256,
-        "n_mel": 1024,
+        "n_mel": 256,
         "fmin": 27,
         "fmax": 11000
     },
     "model": {
-        "name": "mfcaesynth",
+        "name": "sfcaesynthenv",
         "ae_net":{
-            "name": "MFCAESynth",
+            "name": "SFCAESynth",
             "params":{
-                "in_ch": 1,
+                "in_size": 1024,
                 "pitch_class": 84,
-                "timbre_class": 28
-                }
+                "timbre_class": 66,
+                "timbre_size": 32,
+                "mid_size": 512
+            }
             },
             "pitch_disc":{
                 "name": "Classifier",
                 "params":{
-                    "input_size": 512,
+                    "input_size": 32,
                     "output_size": 84,
                     "mid_size": 512
                 }
@@ -52,7 +56,7 @@
         "lambda_p_disc": 1.0,
         "lambda_t_class": 1.0,
         "devices": [0],
-        "batch_size": 8,
+        "batch_size": 1,
         "print_freq": 50,
         "save_latest_freq": 250, 
         "batch_shuffle": true,
