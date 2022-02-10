@@ -28,7 +28,3 @@ In this implementation, we opt for summarizing the training configuration with e
 ```
 python train.py --opt_file "./options/config_file_name.json"
 ```
-
-## Inference
-[comment]: <> (We develop the inference code examples in jupyter notebook so that it is more interactive and intuitive. Synthesized exampled can be found in the `./samples/` directory.)
-An inference jupyter notebook and synthesized samples will be released soon.

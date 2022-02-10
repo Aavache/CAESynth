@@ -9,3 +9,4 @@ lib/__pycache__
 lib/models/__pycache__
 .ipynb_checkpoints
 deprecated/
+inference.ipynb
